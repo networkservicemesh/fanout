@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Doc.ai and/or its affiliates.
+// {NSM COPYRIGHT HOLDERS}
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -13,18 +13,3 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-package fanout
-
-import "time"
-
-const (
-	maxIPCount     = 100
-	maxWorkerCount = 32
-	minWorkerCount = 2
-	maxTimeout     = 2 * time.Second
-	defaultTimeout = 30 * time.Second
-	readTimeout    = 2 * time.Second
-	tcptlc         = "tcp-tls"
-	tcp            = "tcp"
-)

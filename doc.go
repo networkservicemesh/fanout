@@ -14,40 +14,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package fanout - parallel proxying DNS messages to upstream resolvers.
 package fanout
-
-import (
-	"time"
-
-	"github.com/miekg/dns"
-)
-
-type response struct {
-	client   Client
-	response *dns.Msg
-	start    time.Time
-	err      error
-}
-
-func isBetter(left, right *response) bool {
-	if right == nil {
-		return false
-	}
-	if left == nil {
-		return true
-	}
-	if right.err != nil {
-		return false
-	}
-	if left.err != nil {
-		return true
-	}
-	if right.response == nil {
-		return false
-	}
-	if left.response == nil {
-		return true
-	}
-	return left.response.MsgHdr.Rcode != dns.RcodeSuccess &&
-		right.response.MsgHdr.Rcode == dns.RcodeSuccess
-}

@@ -1,14 +1,31 @@
+// Copyright (c) 2020 Doc.ai and/or its affiliates.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package fanout
 
 import (
 	"context"
 	"crypto/tls"
+	"time"
+
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/debug"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
-	"time"
 )
 
 var log = clog.NewWithPlugin("fanout")
@@ -46,7 +63,7 @@ func (f *Fanout) Name() string {
 // ServeDNS implements plugin.Handler.
 func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg) (int, error) {
 	req := request.Request{W: w, Req: m}
-	if !f.match(req) {
+	if !f.match(&req) {
 		return plugin.NextOrFailure(f.Name(), f.Next, ctx, w, m)
 	}
 	timeoutContext, cancel := context.WithTimeout(ctx, defaultTimeout)
@@ -64,7 +81,7 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 		go func() {
 			for c := range workerChannel {
 				start := time.Now()
-				msg, err := c.Request(request.Request{W: w, Req: m})
+				msg, err := c.Request(&request.Request{W: w, Req: m})
 				responseCh <- &response{client: c, response: msg, start: start, err: err}
 			}
 		}()
@@ -76,7 +93,7 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	if result.err != nil {
 		return dns.RcodeServerFailure, result.err
 	}
-	dnsTAP := toDnstap(ctx, result.client.Endpoint(), f.net, req, result.response, result.start)
+	dnsTAP := toDnstap(ctx, result.client.Endpoint(), f.net, &req, result.response, result.start)
 	if !req.Match(result.response) {
 		debug.Hexdumpf(result.response, "Wrong reply for id: %d, %s %d", result.response.Id, req.QName(), req.QType())
 		formerr := new(dns.Msg)
@@ -114,7 +131,7 @@ func (f *Fanout) getFanoutResult(ctx context.Context, responseCh <-chan *respons
 	}
 }
 
-func (f *Fanout) match(state request.Request) bool {
+func (f *Fanout) match(state *request.Request) bool {
 	if !plugin.Name(f.from).Matches(state.Name()) || !f.isAllowedDomain(state.Name()) {
 		return false
 	}

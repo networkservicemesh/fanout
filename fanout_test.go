@@ -1,3 +1,19 @@
+// Copyright (c) 2020 Doc.ai and/or its affiliates.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package fanout
 
 import (
@@ -13,6 +29,8 @@ import (
 	"github.com/coredns/coredns/plugin/test"
 	"github.com/miekg/dns"
 )
+
+const testQuery = "example1."
 
 type cachedDNSWriter struct {
 	answers []*dns.Msg
@@ -33,7 +51,7 @@ type server struct {
 }
 
 func (s *server) close() {
-	s.inner.Shutdown()
+	logErrIfNotNil(s.inner.Shutdown())
 }
 
 func newServer(f dns.HandlerFunc) *server {
@@ -42,7 +60,7 @@ func newServer(f dns.HandlerFunc) *server {
 	s.Handler = f
 
 	for i := 0; i < 10; i++ {
-		s.Listener, _ = net.Listen("tcp", ":0")
+		s.Listener, _ = net.Listen(tcp, ":0")
 		if s.Listener != nil {
 			break
 		}
@@ -52,7 +70,9 @@ func newServer(f dns.HandlerFunc) *server {
 	}
 
 	s.NotifyStartedFunc = func() { close(ch) }
-	go s.ActivateAndServe()
+	go func() {
+		logErrIfNotNil(s.ActivateAndServe())
+	}()
 
 	<-ch
 	return &server{inner: s, addr: s.Listener.Addr().String()}
@@ -67,16 +87,19 @@ func TestFanoutCanReturnUnsuccessRespnse(t *testing.T) {
 	s := newServer(func(w dns.ResponseWriter, r *dns.Msg) {
 		msg := nxdomainMsg()
 		msg.SetRcode(r, msg.Rcode)
-		w.WriteMsg(msg)
+		logErrIfNotNil(w.WriteMsg(msg))
 	})
 	f := New()
 	f.from = "."
 	c := NewClient(s.addr, "tcp")
 	f.addClient(c)
 	req := new(dns.Msg)
-	req.SetQuestion("example1.", dns.TypeA)
+	req.SetQuestion(testQuery, dns.TypeA)
 	writer := &cachedDNSWriter{ResponseWriter: new(test.ResponseWriter)}
-	f.ServeDNS(context.TODO(), writer, req)
+	_, err := f.ServeDNS(context.TODO(), writer, req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(writer.answers) != 1 {
 		t.FailNow()
 	}
@@ -88,27 +111,23 @@ func TestFanoutTwoServersNotSuccessResponse(t *testing.T) {
 	rcode := 1
 	rcodeMutex := sync.Mutex{}
 	s1 := newServer(func(w dns.ResponseWriter, r *dns.Msg) {
-		if r.Question[0].Name == "example1." {
+		if r.Question[0].Name == testQuery {
 			msg := nxdomainMsg()
 			rcodeMutex.Lock()
 			msg.SetRcode(r, rcode)
 			rcode++
 			rcode %= dns.RcodeNotZone
 			rcodeMutex.Unlock()
-			w.WriteMsg(msg)
-			//let another server answer
-			<-time.After(time.Millisecond * 100)
+			logErrIfNotNil(w.WriteMsg(msg))
 		}
 	})
 	s2 := newServer(func(w dns.ResponseWriter, r *dns.Msg) {
-		if r.Question[0].Name == "example1." {
+		if r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1. 3600	IN	A 10.0.0.1")},
 			}
 			msg.SetReply(r)
-			w.WriteMsg(&msg)
-			//let another server answer
-			<-time.After(time.Millisecond * 100)
+			logErrIfNotNil(w.WriteMsg(&msg))
 		}
 	})
 	defer s1.close()
@@ -116,13 +135,17 @@ func TestFanoutTwoServersNotSuccessResponse(t *testing.T) {
 	c1 := NewClient(s1.addr, "tcp")
 	c2 := NewClient(s2.addr, "tcp")
 	f := New()
+	f.from = "."
 	f.addClient(c1)
 	f.addClient(c2)
 	writer := &cachedDNSWriter{ResponseWriter: new(test.ResponseWriter)}
 	for i := 0; i < 10; i++ {
 		req := new(dns.Msg)
-		req.SetQuestion("example1.", dns.TypeA)
-		f.ServeDNS(context.TODO(), writer, req)
+		req.SetQuestion(testQuery, dns.TypeA)
+		_, err := f.ServeDNS(context.TODO(), writer, req)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
 	}
 	for _, m := range writer.answers {
 		if m.MsgHdr.Rcode != dns.RcodeSuccess {
@@ -137,7 +160,7 @@ func TestFanoutTwoServers(t *testing.T) {
 	answerCount1 := 0
 	answerCount2 := 0
 	s1 := newServer(func(w dns.ResponseWriter, r *dns.Msg) {
-		if r.Question[0].Name == "example1." {
+		if r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
 			}
@@ -145,7 +168,7 @@ func TestFanoutTwoServers(t *testing.T) {
 			answerCount1++
 			mutex.Unlock()
 			msg.SetReply(r)
-			w.WriteMsg(&msg)
+			logErrIfNotNil(w.WriteMsg(&msg))
 		}
 	})
 	s2 := newServer(func(w dns.ResponseWriter, r *dns.Msg) {
@@ -157,7 +180,7 @@ func TestFanoutTwoServers(t *testing.T) {
 			answerCount2++
 			mutex.Unlock()
 			msg.SetReply(r)
-			w.WriteMsg(&msg)
+			logErrIfNotNil(w.WriteMsg(&msg))
 		}
 	})
 	defer s1.close()
@@ -171,12 +194,18 @@ func TestFanoutTwoServers(t *testing.T) {
 	f.addClient(c2)
 
 	req := new(dns.Msg)
-	req.SetQuestion("example1.", dns.TypeA)
-	f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+	req.SetQuestion(testQuery, dns.TypeA)
+	_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 	<-time.After(time.Second)
 	req = new(dns.Msg)
 	req.SetQuestion("example2.", dns.TypeA)
-	f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+	_, err = f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 	mutex.Lock()
 	defer mutex.Unlock()
 	if answerCount2 != expected || answerCount1 != expected {
@@ -205,7 +234,7 @@ func TestFanouWorkerCountLessThenServers(t *testing.T) {
 		closeFuncs = append(closeFuncs, incorrectServer.close)
 	}
 	correctServer := newServer(func(w dns.ResponseWriter, r *dns.Msg) {
-		if r.Question[0].Name == "example1." {
+		if r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
 			}
@@ -213,15 +242,18 @@ func TestFanouWorkerCountLessThenServers(t *testing.T) {
 			answerCount1++
 			mutex.Unlock()
 			msg.SetReply(r)
-			w.WriteMsg(&msg)
+			logErrIfNotNil(w.WriteMsg(&msg))
 		}
 	})
 
 	f.addClient(NewClient(correctServer.addr, "tcp"))
 	f.workerCount = 1
 	req := new(dns.Msg)
-	req.SetQuestion("example1.", dns.TypeA)
-	f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+	req.SetQuestion(testQuery, dns.TypeA)
+	_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+	if err != nil {
+		t.FailNow()
+	}
 	<-time.After(time.Second)
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -235,7 +267,7 @@ func TestFanout(t *testing.T) {
 		ret := new(dns.Msg)
 		ret.SetReply(r)
 		ret.Answer = append(ret.Answer, test.A("example.org. IN A 127.0.0.1"))
-		w.WriteMsg(ret)
+		logErrIfNotNil(w.WriteMsg(ret))
 	})
 	defer s.close()
 	source := `fanout . %v {
@@ -246,8 +278,13 @@ func TestFanout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create fanout: %s", err)
 	}
-	f.OnStartup()
-	defer f.OnShutdown()
+	err = f.OnStartup()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	defer func() {
+		logErrIfNotNil(f.OnShutdown())
+	}()
 
 	m := new(dns.Msg)
 	m.SetQuestion("example.org.", dns.TypeA)

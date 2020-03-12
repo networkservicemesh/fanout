@@ -1,3 +1,19 @@
+// Copyright (c) 2020 Doc.ai and/or its affiliates.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package fanout
 
 import (
@@ -21,13 +37,13 @@ func TestSetup(t *testing.T) {
 		expectedNetwork string
 		expectedErr     string
 	}{
-		//positive
+		// positive
 		{input: "fanout . 127.0.0.1", expectedFrom: ".", expectedFails: 2, expectedWorkers: 1, expectedNetwork: "udp"},
 		{input: "fanout . 127.0.0.1 {\nexcept a b\nworker-count 3\n}", expectedFrom: ".", expectedFails: 2, expectedWorkers: 1, expectedIgnored: []string{"a.", "b."}, expectedNetwork: "udp"},
 		{input: "fanout . 127.0.0.1 127.0.0.2 {\nnetwork tcp\n}", expectedFrom: ".", expectedFails: 0, expectedWorkers: 2, expectedNetwork: "tcp", expectedTo: []string{"127.0.0.1:53", "127.0.0.2:53"}},
 		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 127.0.0.4 {\nworker-count 3\n}", expectedFrom: ".", expectedFails: 2, expectedWorkers: 3, expectedNetwork: "udp"},
 
-		//negative
+		// negative
 		{input: "fanout . aaa", expectedErr: "not an IP address or file"},
 		{input: "fanout . 127.0.0.1 {\nexcept a b\nworker-count 1\n}", expectedErr: "use Forward plugin"},
 		{input: "fanout . 127.0.0.1 {\nexcept a b\nworker-count ten\n}", expectedErr: "'ten'"},
@@ -58,8 +74,8 @@ func TestSetup(t *testing.T) {
 		}
 		if test.expectedTo != nil {
 			var to []string
-			for i := 0; i < len(f.clients); i++ {
-				to = append(to, f.clients[i].Endpoint())
+			for j := 0; j < len(f.clients); j++ {
+				to = append(to, f.clients[j].Endpoint())
 			}
 			if !reflect.DeepEqual(to, test.expectedTo) {
 				t.Fatalf("Test %d: expected: %q, actual: %q", i, test.expectedTo, to)
@@ -81,7 +97,9 @@ func TestSetupResolvconf(t *testing.T) {
 nameserver 10.10.255.253`), 0666); err != nil {
 		t.Fatalf("Failed to write resolv.conf file: %s", err)
 	}
-	defer os.Remove(resolv)
+	defer func() {
+		logErrIfNotNil(os.Remove(resolv))
+	}()
 
 	tests := []struct {
 		input         string

@@ -1,18 +1,34 @@
+// Copyright (c) 2020 Doc.ai and/or its affiliates.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package fanout
 
 import (
-	"errors"
-	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/caddyserver/caddy"
 	"github.com/caddyserver/caddy/caddyfile"
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/metrics"
 	"github.com/coredns/coredns/plugin/pkg/parse"
-	pkgtls "github.com/coredns/coredns/plugin/pkg/tls"
+	"github.com/coredns/coredns/plugin/pkg/tls"
 	"github.com/coredns/coredns/plugin/pkg/transport"
-	"strconv"
-	"strings"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -29,7 +45,7 @@ func setup(c *caddy.Controller) error {
 	}
 	l := len(f.clients)
 	if len(f.clients) > maxIPCount {
-		return plugin.Error("fanout", fmt.Errorf("more than %d TOs configured: %d", maxIPCount, l))
+		return plugin.Error("fanout", errors.Errorf("more than %d TOs configured: %d", maxIPCount, l))
 	}
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
@@ -126,7 +142,7 @@ func parsefanoutStanza(c *caddyfile.Dispenser) (*Fanout, error) {
 	return f, nil
 }
 
-func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) (err error) {
+func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 	switch v {
 	case "tls":
 		return parseTLS(f, c)
@@ -139,9 +155,8 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) (err error) {
 	case "except":
 		return parseIgnored(f, c)
 	default:
-		return fmt.Errorf("unknown property %v", v)
+		return errors.Errorf("unknown property %v", v)
 	}
-	return err
 }
 
 func parseIgnored(f *Fanout, c *caddyfile.Dispenser) error {
@@ -164,7 +179,7 @@ func parseWorkerCount(f *Fanout, c *caddyfile.Dispenser) error {
 			return errors.New("worker count should be more or equal 2. Consider to use Forward plugin")
 		}
 		if f.workerCount > maxWorkerCount {
-			return fmt.Errorf("worker count more then max value: %v", maxWorkerCount)
+			return errors.Errorf("worker count more then max value: %v", maxWorkerCount)
 		}
 	}
 	return err
@@ -198,7 +213,7 @@ func parseProtocol(f *Fanout, c *caddyfile.Dispenser) error {
 		return c.ArgErr()
 	}
 	net := strings.ToLower(c.Val())
-	if net != "tcp" && net != "udp" && net != "tcp-tls" {
+	if net != tcp && net != "udp" && net != tcptlc {
 		return errors.New("unknown network protocol")
 	}
 	f.net = net
@@ -211,7 +226,7 @@ func parseTLS(f *Fanout, c *caddyfile.Dispenser) error {
 		return c.ArgErr()
 	}
 
-	tlsConfig, err := pkgtls.NewTLSConfigFromArgs(args...)
+	tlsConfig, err := tls.NewTLSConfigFromArgs(args...)
 	if err != nil {
 		return err
 	}

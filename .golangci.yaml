@@ -157,3 +157,14 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-rules:
+    - path: "setup_test.go"
+      linters:
+        - funlen
+    # CoreDNS plugin should have init func.
+    - path: "setup.go"
+      linters:
+        - gochecknoinits
+    # Binds to all network interfaces is used in test to get port.
+    - path: "fanout_test.go"
+      linters:
+        - gosec
