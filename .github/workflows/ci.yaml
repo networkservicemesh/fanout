@@ -1,0 +1,151 @@
+---
+name: ci
+on: pull_request
+jobs:
+  yamllint:
+    name: yamllint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+      - name: Setup Python
+        uses: actions/setup-python@v1
+      - name: Install yamllint
+        run: pip install --user yamllint
+      - name: Run yamllint
+        run: ~/.local/bin/yamllint -c .yamllint.yml --strict .
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: shellcheck
+        uses: azohra/shell-linter@v0.2.0
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.4
+      - run: |
+          go build -race  ./...
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.4
+      - name: Install gotestsum
+        run: go get gotest.tools/gotestsum@v0.4.0
+      - name: Run tests
+        run: |
+          eval $(go env)
+          mkdir -p ~/junit/
+          ${GOPATH}/bin/gotestsum --junitfile ~/junit/unit-tests.xml -- -race -short $(go list ./...)
+  golangci-lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    env:
+      GOLANGCI_LINT_CONTAINER: golangci/golangci-lint:v1.23.2
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+      - name: Pull golangci-lint docker container
+        run: docker pull ${GOLANGCI_LINT_CONTAINER}
+      - name: Run golangci-lint
+        run: docker run --rm -v $(pwd):/app -w /app ${GOLANGCI_LINT_CONTAINER} golangci-lint run
+
+  excludeFmtErrorf:
+    name: exclude fmt.Errorf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Exclude fmt.Errorf
+        run: |
+          if grep -r --include=*.go fmt.Errorf . ; then
+           echo "Please use errors.Errorf (or errors.New or errors.Wrap or errors.Wrapf) as appropriate rather than fmt.Errorf"
+           exit 1
+          fi
+
+  restrictNSMDeps:
+    name: Restrict dependencies on github.com/networkservicemesh/*
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Restrict dependencies on github.com/networkservicemesh/*
+        run: |
+          for i in $(grep github.com/networkservicemesh/ go.mod |grep -v '^module' | sed 's;.*\(github.com\/networkservicemesh\/[a-zA-z\/]*\).*;\1;g' | sort -u);do
+            if [ "${i}" != "github.com/networkservicemesh/api" ]; then
+              echo Dependency on "${i}" is forbidden
+              exit 1
+            fi
+          done
+
+  checkgomod:
+    name: check go.mod and go.sum
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.4
+      - run: go mod tidy
+      - name: Check for changes in go.mod or go.sum
+        run: |
+          git diff --name-only --exit-code go.mod || ( echo "Run go tidy" && false )
+          git diff --name-only --exit-code go.sum || ( echo "Run go tidy" && false )
+  license:
+    name: license header check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.4
+      - name: Install go-header
+        run: 'go get github.com/denis-tingajkin/go-header@v0.2.2'
+      - name: Run go-header
+        run: |
+          eval $(go env)
+          ${GOPATH}/bin/go-header
+  excludereplace:
+    name: Exclude Replace in go.mod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v1
+      - name: Exclude replace in go.mod
+        run: |
+          grep ^replace go.mod || exit 0
+          exit 1
+  captureRunEnv:
+    name: Capture CI Run Env
+    runs-on: ubuntu-latest
+    steps:
+      - run: printenv
+  automerge:
+    name: automerge
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - test
+    if: github.actor == 'nsmbot' && github.base_ref == 'master' && github.event_name == 'pull_request'
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v1
+      - name: Fetch master
+        run: |
+          git remote -v
+          git fetch --depth=1 origin master
+      - name: Only allow go.mod and go.sum changes
+        run: |
+          find . -type f ! -name 'go.mod' ! -name 'go.sum' -exec git diff --exit-code origin/master -- {} +
+      - name: Automerge nsmbot PR
+        uses: ridedott/merge-me-action@master
+        with:
+          GITHUB_LOGIN: nsmbot
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
