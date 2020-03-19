@@ -22,6 +22,6 @@ jobs:
         run: |
           go build -o coredns/coredns coredns/main.go
           docker build coredns/. -t "${ORG}/coredns:${TAG}"
-          echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USER}" --password-stdin
+          docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
           docker push "${ORG}/coredns:${TAG}"
           docker image rm "${ORG}/coredns:${TAG}"
