@@ -58,7 +58,26 @@ jobs:
         run: docker pull ${GOLANGCI_LINT_CONTAINER}
       - name: Run golangci-lint
         run: docker run --rm -v $(pwd):/app -w /app ${GOLANGCI_LINT_CONTAINER} golangci-lint run
-
+  buildDockerImage:
+    name: build docker image
+    runs-on: ubuntu-latest
+    env:
+      TAG: test
+      ORG: networkservicemesh
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.4
+      - name: build coredns binary
+        run: |
+          go build -o coredns/coredns coredns/main.go
+      - name: build docker image
+        run: |
+          docker build coredns/. -t "${ORG}/coredns:${TAG}"
+      - name: remove docker image
+        run:
+          docker image rm "${ORG}/coredns:${TAG}"
   excludeFmtErrorf:
     name: exclude fmt.Errorf
     runs-on: ubuntu-latest
@@ -127,25 +146,3 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: printenv
-  automerge:
-    name: automerge
-    runs-on: ubuntu-latest
-    needs:
-      - build
-      - test
-    if: github.actor == 'nsmbot' && github.base_ref == 'master' && github.event_name == 'pull_request'
-    steps:
-      - name: Check out the code
-        uses: actions/checkout@v1
-      - name: Fetch master
-        run: |
-          git remote -v
-          git fetch --depth=1 origin master
-      - name: Only allow go.mod and go.sum changes
-        run: |
-          find . -type f ! -name 'go.mod' ! -name 'go.sum' -exec git diff --exit-code origin/master -- {} +
-      - name: Automerge nsmbot PR
-        uses: ridedott/merge-me-action@master
-        with:
-          GITHUB_LOGIN: nsmbot
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
