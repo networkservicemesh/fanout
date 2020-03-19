@@ -1,0 +1,27 @@
+---
+name: push
+on:
+  push:
+    branches:
+      - master
+jobs:
+  pushImage:
+    name: push image
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      DOCKER_LOGIN: ${{ secrets.DOCKER_LOGIN }}
+      TAG: master
+      ORG: networkservicemesh
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.4
+      - name: Push coredns image
+        run: |
+          go build -o coredns/coredns coredns/main.go
+          docker build coredns/. -t "${ORG}/coredns:${TAG}"
+          echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_LOGIN}" --password-stdin
+          docker push "${ORG}/coredns:${TAG}"
+          docker image rm "${ORG}/coredns:${TAG}"
