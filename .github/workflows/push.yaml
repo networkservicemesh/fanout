@@ -13,6 +13,7 @@ jobs:
       DOCKER_USER: ${{ secrets.DOCKER_LOGIN }}
       TAG: master
       ORG: networkservicemesh
+      CGO_ENABLED: 0
     steps:
       - uses: actions/checkout@v1
       - uses: actions/setup-go@v1
