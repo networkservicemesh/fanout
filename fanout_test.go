@@ -247,7 +247,7 @@ func (t *fanoutTestSuite) TestBusyServer() {
 	i := 0
 	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		if i%2 == 0 {
-			//server is busy
+			// server is busy
 		} else if r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},

@@ -168,3 +168,7 @@ issues:
     - path: "fanout_test.go"
       linters:
         - gosec
+    # Tests may be long.
+    - path: "setup_test.go"
+      linters:
+        - gocyclo
