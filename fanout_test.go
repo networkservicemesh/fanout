@@ -262,6 +262,7 @@ func (t *fanoutTestSuite) TestBusyServer() {
 	f := New()
 	f.net = t.network
 	f.from = "."
+	f.attempts = 0
 	f.addClient(c)
 	req := new(dns.Msg)
 	req.SetQuestion(testQuery, dns.TypeA)

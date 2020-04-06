@@ -19,6 +19,7 @@ package fanout
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/caddyserver/caddy"
 	"github.com/caddyserver/caddy/caddyfile"
@@ -152,6 +153,8 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 		return parseTLSServer(f, c)
 	case "worker-count":
 		return parseWorkerCount(f, c)
+	case "timeout":
+		return parseTimeout(f, c)
 	case "except":
 		return parseIgnored(f, c)
 	case "attempt-count":
@@ -161,6 +164,16 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 	default:
 		return errors.Errorf("unknown property %v", v)
 	}
+}
+
+func parseTimeout(f *Fanout, c *caddyfile.Dispenser) error {
+	if !c.NextArg() {
+		return c.ArgErr()
+	}
+	var err error
+	val := c.Val()
+	f.timeout, err = time.ParseDuration(val)
+	return err
 }
 
 func parseIgnored(f *Fanout, c *caddyfile.Dispenser) error {
