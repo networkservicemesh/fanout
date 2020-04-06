@@ -27,4 +27,5 @@ const (
 	readTimeout    = 2 * time.Second
 	tcptlc         = "tcp-tls"
 	tcp            = "tcp"
+	udp            = "udp"
 )

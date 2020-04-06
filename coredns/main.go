@@ -23,6 +23,7 @@ import (
 	_ "github.com/coredns/coredns/plugin/hosts"
 	_ "github.com/coredns/coredns/plugin/log"
 	_ "github.com/coredns/coredns/plugin/reload"
+
 	_ "github.com/networkservicemesh/fanout"
 )
 
