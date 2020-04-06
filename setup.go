@@ -154,6 +154,10 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 		return parseWorkerCount(f, c)
 	case "except":
 		return parseIgnored(f, c)
+	case "attempt-count":
+		num, err := parsePositiveInt(c)
+		f.attempts = num
+		return err
 	default:
 		return errors.Errorf("unknown property %v", v)
 	}
