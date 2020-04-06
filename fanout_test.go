@@ -241,6 +241,39 @@ func (t *fanoutTestSuite) TestCanReturnUnsuccessfulRepose() {
 	t.Equal(writer.answers[0].MsgHdr.Rcode, dns.RcodeNameError, "fanout plugin returns first negative answer if other answers on request are negative")
 }
 
+func (t *fanoutTestSuite) TestBusyServer() {
+	var mutex sync.Mutex
+	answerCount1 := 0
+	i := 0
+	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
+		if i%2 == 0 {
+			//server is busy
+		} else if r.Question[0].Name == testQuery {
+			msg := dns.Msg{
+				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
+			}
+			mutex.Lock()
+			answerCount1++
+			mutex.Unlock()
+			msg.SetReply(r)
+			logErrIfNotNil(w.WriteMsg(&msg))
+		}
+		i++
+	})
+	c := NewClient(s.addr, t.network)
+	f := New()
+	f.net = t.network
+	f.from = "."
+	f.addClient(c)
+	req := new(dns.Msg)
+	req.SetQuestion(testQuery, dns.TypeA)
+	for i := 0; i < 5; i++ {
+		_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+		t.Nil(err)
+	}
+	t.Equal(5, answerCount1)
+}
+
 func (t *fanoutTestSuite) TestTwoServers() {
 	const expected = 1
 	var mutex sync.Mutex

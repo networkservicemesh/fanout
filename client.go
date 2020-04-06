@@ -82,7 +82,6 @@ func (c *client) Request(r *request.Request) (*dns.Msg, error) {
 	for {
 		ret, err = conn.ReadMsg()
 		if err != nil {
-			logErrIfNotNil(err)
 			return nil, err
 		}
 		if r.Req.Id == ret.Id {
