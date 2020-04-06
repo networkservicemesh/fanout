@@ -25,6 +25,7 @@ const (
 	maxTimeout     = 2 * time.Second
 	defaultTimeout = 30 * time.Second
 	readTimeout    = 2 * time.Second
+	attemptDelay   = time.Millisecond * 100
 	tcptlc         = "tcp-tls"
 	tcp            = "tcp"
 	udp            = "udp"

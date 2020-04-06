@@ -155,7 +155,7 @@ func (f *Fanout) isAllowedDomain(name string) bool {
 
 func (f *Fanout) processClient(ctx context.Context, c Client, r *request.Request) *response {
 	start := time.Now()
-	for j := 0; j < f.attempts || f.attempts == 0; {
+	for j := 0; j < f.attempts || f.attempts == 0; <-time.After(attemptDelay) {
 		if ctx.Err() != nil {
 			return &response{client: c, response: nil, start: start, err: ctx.Err()}
 		}
