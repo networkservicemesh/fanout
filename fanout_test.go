@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -242,23 +243,20 @@ func (t *fanoutTestSuite) TestCanReturnUnsuccessfulRepose() {
 }
 
 func (t *fanoutTestSuite) TestBusyServer() {
-	var mutex sync.Mutex
-	answerCount1 := 0
-	i := 0
+	var requestNum, answerCount int32
+	totalRequestNum := int32(5)
 	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
-		if i%2 == 0 {
+		if atomic.LoadInt32(&requestNum)%2 == 0 {
 			// server is busy
 		} else if r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
 			}
-			mutex.Lock()
-			answerCount1++
-			mutex.Unlock()
+			atomic.AddInt32(&answerCount, 1)
 			msg.SetReply(r)
 			logErrIfNotNil(w.WriteMsg(&msg))
 		}
-		i++
+		atomic.AddInt32(&requestNum, 1)
 	})
 	c := NewClient(s.addr, t.network)
 	f := New()
@@ -267,11 +265,11 @@ func (t *fanoutTestSuite) TestBusyServer() {
 	f.addClient(c)
 	req := new(dns.Msg)
 	req.SetQuestion(testQuery, dns.TypeA)
-	for i := 0; i < 5; i++ {
+	for i := int32(0); i < totalRequestNum; i++ {
 		_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
 		t.Nil(err)
 	}
-	t.Equal(5, answerCount1)
+	t.Equal(totalRequestNum, atomic.LoadInt32(&answerCount))
 }
 
 func (t *fanoutTestSuite) TestTwoServers() {
