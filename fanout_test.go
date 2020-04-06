@@ -62,13 +62,12 @@ func newServer(network string, f dns.HandlerFunc) *server {
 	s.Handler = f
 
 	for i := 0; i < 10; i++ {
-		switch network {
-		case tcp:
+		if network == tcp {
 			s.Listener, _ = net.Listen(tcp, ":0")
 			if s.Listener != nil {
 				break
 			}
-		case udp:
+		} else {
 			s.Listener, _ = net.Listen(tcp, ":0")
 			if s.Listener == nil {
 				continue
@@ -78,12 +77,9 @@ func newServer(network string, f dns.HandlerFunc) *server {
 				break
 			}
 		}
-
 		if s.Listener != nil {
-
 			break
 		}
-
 	}
 	if s.Listener == nil {
 		panic("failed to create new client")
@@ -108,8 +104,8 @@ type fanoutTestSuite struct {
 	network string
 }
 
-func (suite *fanoutTestSuite) TestConfigFromCorefile() {
-	s := newServer(suite.network, func(w dns.ResponseWriter, r *dns.Msg) {
+func (t *fanoutTestSuite) TestConfigFromCorefile() {
+	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		ret := new(dns.Msg)
 		ret.SetReply(r)
 		ret.Answer = append(ret.Answer, test.A("example.org. IN A 127.0.0.1"))
@@ -119,11 +115,11 @@ func (suite *fanoutTestSuite) TestConfigFromCorefile() {
 	source := `fanout . %v {
 	NETWORK %v
 }`
-	c := caddy.NewTestController("dns", fmt.Sprintf(source, s.addr, suite.network))
+	c := caddy.NewTestController("dns", fmt.Sprintf(source, s.addr, t.network))
 	f, err := parseFanout(c)
-	suite.Nil(err)
+	t.Nil(err)
 	err = f.OnStartup()
-	suite.Nil(err)
+	t.Nil(err)
 	defer func() {
 		logErrIfNotNil(f.OnShutdown())
 	}()
@@ -133,11 +129,11 @@ func (suite *fanoutTestSuite) TestConfigFromCorefile() {
 	rec := dnstest.NewRecorder(&test.ResponseWriter{})
 
 	_, err = f.ServeDNS(context.TODO(), rec, m)
-	suite.Nil(err)
-	suite.Equal(rec.Msg.Answer[0].Header().Name, "example.org.")
+	t.Nil(err)
+	t.Equal(rec.Msg.Answer[0].Header().Name, "example.org.")
 }
 
-func (suite *fanoutTestSuite) TestWorkerCountLessThenServers() {
+func (t *fanoutTestSuite) TestWorkerCountLessThenServers() {
 	const expected = 1
 	answerCount := 0
 	var mutex sync.Mutex
@@ -152,12 +148,12 @@ func (suite *fanoutTestSuite) TestWorkerCountLessThenServers() {
 	f.from = "."
 
 	for i := 0; i < 4; i++ {
-		incorrectServer := newServer(suite.network, func(w dns.ResponseWriter, r *dns.Msg) {
+		incorrectServer := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		})
-		f.addClient(NewClient(incorrectServer.addr, "tcp"))
+		f.addClient(NewClient(incorrectServer.addr, t.network))
 		closeFuncs = append(closeFuncs, incorrectServer.close)
 	}
-	correctServer := newServer(suite.network, func(w dns.ResponseWriter, r *dns.Msg) {
+	correctServer := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		if r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
@@ -170,21 +166,21 @@ func (suite *fanoutTestSuite) TestWorkerCountLessThenServers() {
 		}
 	})
 
-	f.addClient(NewClient(correctServer.addr, suite.network))
+	f.addClient(NewClient(correctServer.addr, t.network))
 	f.workerCount = 1
 	req := new(dns.Msg)
 	req.SetQuestion(testQuery, dns.TypeA)
 	_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
-	suite.Nil(err)
+	t.Nil(err)
 	<-time.After(time.Second)
 	mutex.Lock()
 	defer mutex.Unlock()
-	suite.Equal(answerCount, expected)
+	t.Equal(answerCount, expected)
 }
-func (suite *fanoutTestSuite) TestTwoServersUnsuccessfulResponse() {
+func (t *fanoutTestSuite) TestTwoServersUnsuccessfulResponse() {
 	rcode := 1
 	rcodeMutex := sync.Mutex{}
-	s1 := newServer(suite.network, func(w dns.ResponseWriter, r *dns.Msg) {
+	s1 := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		if r.Question[0].Name == testQuery {
 			msg := nxdomainMsg()
 			rcodeMutex.Lock()
@@ -195,7 +191,7 @@ func (suite *fanoutTestSuite) TestTwoServersUnsuccessfulResponse() {
 			logErrIfNotNil(w.WriteMsg(msg))
 		}
 	})
-	s2 := newServer(suite.network, func(w dns.ResponseWriter, r *dns.Msg) {
+	s2 := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		if r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1. 3600	IN	A 10.0.0.1")},
@@ -206,10 +202,10 @@ func (suite *fanoutTestSuite) TestTwoServersUnsuccessfulResponse() {
 	})
 	defer s1.close()
 	defer s2.close()
-	c1 := NewClient(s1.addr, suite.network)
-	c2 := NewClient(s2.addr, suite.network)
+	c1 := NewClient(s1.addr, t.network)
+	c2 := NewClient(s2.addr, t.network)
 	f := New()
-	f.net = suite.network
+	f.net = t.network
 	f.from = "."
 	f.addClient(c1)
 	f.addClient(c2)
@@ -218,39 +214,39 @@ func (suite *fanoutTestSuite) TestTwoServersUnsuccessfulResponse() {
 		req := new(dns.Msg)
 		req.SetQuestion(testQuery, dns.TypeA)
 		_, err := f.ServeDNS(context.TODO(), writer, req)
-		suite.Nil(err)
+		t.Nil(err)
 	}
 	for _, m := range writer.answers {
-		suite.Equal(m.MsgHdr.Rcode, dns.RcodeSuccess)
+		t.Equal(m.MsgHdr.Rcode, dns.RcodeSuccess)
 	}
 }
 
-func (suite *fanoutTestSuite) TestCanReturnUnsuccessfulRepose() {
-	s := newServer(suite.network, func(w dns.ResponseWriter, r *dns.Msg) {
+func (t *fanoutTestSuite) TestCanReturnUnsuccessfulRepose() {
+	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		msg := nxdomainMsg()
 		msg.SetRcode(r, msg.Rcode)
 		logErrIfNotNil(w.WriteMsg(msg))
 	})
 	f := New()
-	f.net = suite.network
+	f.net = t.network
 	f.from = "."
-	c := NewClient(s.addr, suite.network)
+	c := NewClient(s.addr, t.network)
 	f.addClient(c)
 	req := new(dns.Msg)
 	req.SetQuestion(testQuery, dns.TypeA)
 	writer := &cachedDNSWriter{ResponseWriter: new(test.ResponseWriter)}
 	_, err := f.ServeDNS(context.Background(), writer, req)
-	suite.Nil(err)
-	suite.Len(writer.answers, 1)
-	suite.Equal(writer.answers[0].MsgHdr.Rcode, dns.RcodeNameError, "fanout plugin returns first negative answer if other answers on request are negative")
+	t.Nil(err)
+	t.Len(writer.answers, 1)
+	t.Equal(writer.answers[0].MsgHdr.Rcode, dns.RcodeNameError, "fanout plugin returns first negative answer if other answers on request are negative")
 }
 
-func (suite *fanoutTestSuite) TestTwoServers() {
+func (t *fanoutTestSuite) TestTwoServers() {
 	const expected = 1
 	var mutex sync.Mutex
 	answerCount1 := 0
 	answerCount2 := 0
-	s1 := newServer(suite.network, func(w dns.ResponseWriter, r *dns.Msg) {
+	s1 := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		if r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
@@ -262,7 +258,7 @@ func (suite *fanoutTestSuite) TestTwoServers() {
 			logErrIfNotNil(w.WriteMsg(&msg))
 		}
 	})
-	s2 := newServer(suite.network, func(w dns.ResponseWriter, r *dns.Msg) {
+	s2 := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		if r.Question[0].Name == "example2." {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example2. 3600	IN	A 10.0.0.1")},
@@ -277,10 +273,10 @@ func (suite *fanoutTestSuite) TestTwoServers() {
 	defer s1.close()
 	defer s2.close()
 
-	c1 := NewClient(s1.addr, suite.network)
-	c2 := NewClient(s2.addr, suite.network)
+	c1 := NewClient(s1.addr, t.network)
+	c2 := NewClient(s2.addr, t.network)
 	f := New()
-	f.net = suite.network
+	f.net = t.network
 	f.from = "."
 	f.addClient(c1)
 	f.addClient(c2)
@@ -288,16 +284,16 @@ func (suite *fanoutTestSuite) TestTwoServers() {
 	req := new(dns.Msg)
 	req.SetQuestion(testQuery, dns.TypeA)
 	_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
-	suite.Nil(err)
+	t.Nil(err)
 	<-time.After(time.Second)
 	req = new(dns.Msg)
 	req.SetQuestion("example2.", dns.TypeA)
 	_, err = f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
-	suite.Nil(err)
+	t.Nil(err)
 	mutex.Lock()
 	defer mutex.Unlock()
-	suite.Equal(answerCount1, expected)
-	suite.Equal(answerCount2, expected)
+	t.Equal(answerCount1, expected)
+	t.Equal(answerCount2, expected)
 }
 
 func TestFanoutUDPSuite(t *testing.T) {
