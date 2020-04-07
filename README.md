@@ -26,7 +26,8 @@ Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated i
 * `worker-count` is the number of parallel queries per request. By default equals to count of IP list. Use this only for reducing parallel queries per request.
 * `network` is a specific network protocol. Could be `tcp`, `udp`, `tcp-tls`.
 * `except` is a list is a space-separated list of domains to exclude from proxying.
-
+* `attempt-count` is the number of attempts to connect to upstream servers that are needed before considering an upstream to be down. If 0, the upstream will never be marked as down and request will be finished by `timeout`. Default is `3`.
+* `timeout` is the timeout of request. After this period, attempts to receive a response from the upstream servers will be stopped. Default is `30s`.
 ## Metrics
 
 If monitoring is enabled (via the *prometheus* plugin) then the following metric are exported:

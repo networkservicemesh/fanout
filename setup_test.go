@@ -22,26 +22,29 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy"
 )
 
 func TestSetup(t *testing.T) {
 	tests := []struct {
-		input           string
-		expectedFrom    string
-		expectedTo      []string
-		expectedIgnored []string
-		expectedFails   int
-		expectedWorkers int
-		expectedNetwork string
-		expectedErr     string
+		input            string
+		expectedFrom     string
+		expectedTo       []string
+		expectedIgnored  []string
+		expectedWorkers  int
+		expectedAttempts int
+		expectedTimeout  time.Duration
+		expectedNetwork  string
+		expectedErr      string
 	}{
 		// positive
-		{input: "fanout . 127.0.0.1", expectedFrom: ".", expectedFails: 2, expectedWorkers: 1, expectedNetwork: "udp"},
-		{input: "fanout . 127.0.0.1 {\nexcept a b\nworker-count 3\n}", expectedFrom: ".", expectedFails: 2, expectedWorkers: 1, expectedIgnored: []string{"a.", "b."}, expectedNetwork: "udp"},
-		{input: "fanout . 127.0.0.1 127.0.0.2 {\nnetwork tcp\n}", expectedFrom: ".", expectedFails: 0, expectedWorkers: 2, expectedNetwork: "tcp", expectedTo: []string{"127.0.0.1:53", "127.0.0.2:53"}},
-		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 127.0.0.4 {\nworker-count 3\n}", expectedFrom: ".", expectedFails: 2, expectedWorkers: 3, expectedNetwork: "udp"},
+		{input: "fanout . 127.0.0.1", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 1, expectedTimeout: defaultTimeout, expectedNetwork: "udp"},
+		{input: "fanout . 127.0.0.1 {\nexcept a b\nworker-count 3\n}", expectedFrom: ".", expectedTimeout: defaultTimeout, expectedAttempts: 3, expectedWorkers: 1, expectedIgnored: []string{"a.", "b."}, expectedNetwork: "udp"},
+		{input: "fanout . 127.0.0.1 127.0.0.2 {\nnetwork tcp\n}", expectedFrom: ".", expectedTimeout: defaultTimeout, expectedAttempts: 3, expectedWorkers: 2, expectedNetwork: "tcp", expectedTo: []string{"127.0.0.1:53", "127.0.0.2:53"}},
+		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 127.0.0.4 {\nworker-count 3\ntimeout 1m\n}", expectedTimeout: time.Minute, expectedAttempts: 3, expectedFrom: ".", expectedWorkers: 3, expectedNetwork: "udp"},
+		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 127.0.0.4 {\nattempt-count 2\n}", expectedTimeout: defaultTimeout, expectedFrom: ".", expectedAttempts: 2, expectedWorkers: 4, expectedNetwork: "udp"},
 
 		// negative
 		{input: "fanout . aaa", expectedErr: "not an IP address or file"},
@@ -63,7 +66,12 @@ func TestSetup(t *testing.T) {
 			}
 			continue
 		}
-
+		if f.timeout != test.expectedTimeout {
+			t.Fatalf("Test %d: expected: %d, got: %d", i, test.expectedTimeout, f.timeout)
+		}
+		if f.attempts != test.expectedAttempts {
+			t.Fatalf("Test %d: expected: %d, got: %d", i, test.expectedAttempts, f.attempts)
+		}
 		if f.from != test.expectedFrom && test.expectedFrom != "" {
 			t.Fatalf("Test %d: expected: %s, got: %s", i, test.expectedFrom, f.from)
 		}

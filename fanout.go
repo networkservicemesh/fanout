@@ -19,6 +19,7 @@ package fanout
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"time"
 
 	"github.com/coredns/coredns/plugin"
@@ -36,8 +37,10 @@ type Fanout struct {
 	tlsConfig     *tls.Config
 	ignored       []string
 	tlsServerName string
+	timeout       time.Duration
 	net           string
 	from          string
+	attempts      int
 	workerCount   int
 	Next          plugin.Handler
 }
@@ -47,6 +50,8 @@ func New() *Fanout {
 	return &Fanout{
 		tlsConfig: new(tls.Config),
 		net:       "udp",
+		attempts:  3,
+		timeout:   defaultTimeout,
 	}
 }
 
@@ -80,9 +85,7 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	for i := 0; i < f.workerCount; i++ {
 		go func() {
 			for c := range workerChannel {
-				start := time.Now()
-				msg, err := c.Request(&request.Request{W: w, Req: m})
-				responseCh <- &response{client: c, response: msg, start: start, err: err}
+				responseCh <- f.processClient(timeoutContext, c, &request.Request{W: w, Req: m})
 			}
 		}()
 	}
@@ -148,4 +151,21 @@ func (f *Fanout) isAllowedDomain(name string) bool {
 		}
 	}
 	return true
+}
+
+func (f *Fanout) processClient(ctx context.Context, c Client, r *request.Request) *response {
+	start := time.Now()
+	for j := 0; j < f.attempts || f.attempts == 0; <-time.After(attemptDelay) {
+		if ctx.Err() != nil {
+			return &response{client: c, response: nil, start: start, err: ctx.Err()}
+		}
+		msg, err := c.Request(r)
+		if err == nil {
+			return &response{client: c, response: msg, start: start, err: err}
+		}
+		if f.attempts != 0 {
+			j++
+		}
+	}
+	return &response{client: c, response: nil, start: start, err: errors.New("attempt limit has been reached")}
 }

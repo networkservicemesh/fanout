@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -239,6 +240,37 @@ func (t *fanoutTestSuite) TestCanReturnUnsuccessfulRepose() {
 	t.Nil(err)
 	t.Len(writer.answers, 1)
 	t.Equal(writer.answers[0].MsgHdr.Rcode, dns.RcodeNameError, "fanout plugin returns first negative answer if other answers on request are negative")
+}
+
+func (t *fanoutTestSuite) TestBusyServer() {
+	var requestNum, answerCount int32
+	totalRequestNum := int32(5)
+	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
+		if atomic.LoadInt32(&requestNum)%2 == 0 {
+			// server is busy
+		} else if r.Question[0].Name == testQuery {
+			msg := dns.Msg{
+				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
+			}
+			atomic.AddInt32(&answerCount, 1)
+			msg.SetReply(r)
+			logErrIfNotNil(w.WriteMsg(&msg))
+		}
+		atomic.AddInt32(&requestNum, 1)
+	})
+	c := NewClient(s.addr, t.network)
+	f := New()
+	f.net = t.network
+	f.from = "."
+	f.attempts = 0
+	f.addClient(c)
+	req := new(dns.Msg)
+	req.SetQuestion(testQuery, dns.TypeA)
+	for i := int32(0); i < totalRequestNum; i++ {
+		_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+		t.Nil(err)
+	}
+	t.Equal(totalRequestNum, atomic.LoadInt32(&answerCount))
 }
 
 func (t *fanoutTestSuite) TestTwoServers() {
