@@ -76,8 +76,10 @@ func TestSetup(t *testing.T) {
 			t.Fatalf("Test %d: expected: %s, got: %s", i, test.expectedFrom, f.from)
 		}
 		if test.expectedIgnored != nil {
-			if !reflect.DeepEqual(f.ignored, test.expectedIgnored) {
-				t.Fatalf("Test %d: expected: %q, actual: %q", i, test.expectedIgnored, f.ignored)
+			for _, expected := range test.expectedIgnored {
+				if !f.excludeDomains.Contains(expected) {
+					t.Fatalf("Test %d: missed exclude domain name: %v", i, test.expectedIgnored)
+				}
 			}
 		}
 		if test.expectedTo != nil {

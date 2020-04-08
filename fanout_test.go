@@ -19,11 +19,16 @@ package fanout
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/caddyserver/caddy"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
@@ -105,6 +110,26 @@ type fanoutTestSuite struct {
 	network string
 }
 
+func TestFanout_ExceptFile(t *testing.T) {
+	file, err := ioutil.TempFile(os.TempDir(), t.Name())
+	exclude := []string{"example1.com.", "example2.com."}
+	require.Nil(t, err)
+	defer func() {
+		require.Nil(t, os.Remove(file.Name()))
+	}()
+	_, err = file.WriteString(strings.Join(exclude, "\n"))
+	require.Nil(t, err)
+	source := fmt.Sprintf(`fanout . 0.0.0.0:53 {
+	except-file %v
+}`, file.Name())
+	c := caddy.NewTestController("dns", source)
+	f, err := parseFanout(c)
+	require.Nil(t, err)
+	for _, e := range exclude {
+		require.True(t, f.excludeDomains.Contains(e))
+	}
+}
+
 func (t *fanoutTestSuite) TestConfigFromCorefile() {
 	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		ret := new(dns.Msg)
@@ -169,6 +194,7 @@ func (t *fanoutTestSuite) TestWorkerCountLessThenServers() {
 
 	f.addClient(NewClient(correctServer.addr, t.network))
 	f.workerCount = 1
+	f.attempts = 1
 	req := new(dns.Msg)
 	req.SetQuestion(testQuery, dns.TypeA)
 	_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)

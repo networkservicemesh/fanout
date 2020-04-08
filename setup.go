@@ -17,6 +17,8 @@
 package fanout
 
 import (
+	"io/ioutil"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -157,6 +159,8 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 		return parseTimeout(f, c)
 	case "except":
 		return parseIgnored(f, c)
+	case "except-file":
+		return parseIgnoredFromFile(f, c)
 	case "attempt-count":
 		num, err := parsePositiveInt(c)
 		f.attempts = num
@@ -176,15 +180,30 @@ func parseTimeout(f *Fanout, c *caddyfile.Dispenser) error {
 	return err
 }
 
+func parseIgnoredFromFile(f *Fanout, c *caddyfile.Dispenser) error {
+	args := c.RemainingArgs()
+	if len(args) != 1 {
+		return c.ArgErr()
+	}
+	b, err := ioutil.ReadFile(filepath.Clean(args[0]))
+	if err != nil {
+		return err
+	}
+	names := strings.Split(string(b), "\n")
+	for i := 0; i < len(names); i++ {
+		f.excludeDomains.AddString(plugin.Host(names[i]).Normalize())
+	}
+	return nil
+}
+
 func parseIgnored(f *Fanout, c *caddyfile.Dispenser) error {
 	ignore := c.RemainingArgs()
 	if len(ignore) == 0 {
 		return c.ArgErr()
 	}
 	for i := 0; i < len(ignore); i++ {
-		ignore[i] = plugin.Host(ignore[i]).Normalize()
+		f.excludeDomains.AddString(plugin.Host(ignore[i]).Normalize())
 	}
-	f.ignored = ignore
 	return nil
 }
 
