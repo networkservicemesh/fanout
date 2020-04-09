@@ -33,25 +33,26 @@ var log = clog.NewWithPlugin("fanout")
 
 // Fanout represents a plugin instance that can do async requests to list of DNS servers.
 type Fanout struct {
-	clients       []Client
-	tlsConfig     *tls.Config
-	ignored       []string
-	tlsServerName string
-	timeout       time.Duration
-	net           string
-	from          string
-	attempts      int
-	workerCount   int
-	Next          plugin.Handler
+	clients        []Client
+	tlsConfig      *tls.Config
+	excludeDomains Domain
+	tlsServerName  string
+	timeout        time.Duration
+	net            string
+	from           string
+	attempts       int
+	workerCount    int
+	Next           plugin.Handler
 }
 
 // New returns reference to new Fanout plugin instance with default configs.
 func New() *Fanout {
 	return &Fanout{
-		tlsConfig: new(tls.Config),
-		net:       "udp",
-		attempts:  3,
-		timeout:   defaultTimeout,
+		tlsConfig:      new(tls.Config),
+		net:            "udp",
+		attempts:       3,
+		timeout:        defaultTimeout,
+		excludeDomains: NewDomain(),
 	}
 }
 
@@ -135,20 +136,8 @@ func (f *Fanout) getFanoutResult(ctx context.Context, responseCh <-chan *respons
 }
 
 func (f *Fanout) match(state *request.Request) bool {
-	if !plugin.Name(f.from).Matches(state.Name()) || !f.isAllowedDomain(state.Name()) {
+	if !plugin.Name(f.from).Matches(state.Name()) || f.excludeDomains.Contains(state.Name()) {
 		return false
-	}
-	return true
-}
-
-func (f *Fanout) isAllowedDomain(name string) bool {
-	if dns.Name(name) == dns.Name(f.from) {
-		return true
-	}
-	for _, ignore := range f.ignored {
-		if plugin.Name(ignore).Matches(name) {
-			return false
-		}
 	}
 	return true
 }
