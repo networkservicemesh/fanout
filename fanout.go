@@ -76,6 +76,7 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	defer cancel()
 	clientCount := len(f.clients)
 	workerChannel := make(chan Client, f.workerCount)
+	defer close(workerChannel)
 	responseCh := make(chan *response, clientCount)
 	go func() {
 		for i := 0; i < clientCount; i++ {
@@ -148,7 +149,7 @@ func (f *Fanout) processClient(ctx context.Context, c Client, r *request.Request
 		if ctx.Err() != nil {
 			return &response{client: c, response: nil, start: start, err: ctx.Err()}
 		}
-		msg, err := c.Request(r)
+		msg, err := c.Request(ctx, r)
 		if err == nil {
 			return &response{client: c, response: msg, start: start, err: err}
 		}

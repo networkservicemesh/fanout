@@ -17,14 +17,16 @@
 package fanout
 
 import (
+	"context"
 	"crypto/tls"
+	"net"
 
 	"github.com/miekg/dns"
 )
 
 // Transport represent a solution to connect to remote DNS endpoint with specific network
 type Transport interface {
-	Dial(net string) (*dns.Conn, error)
+	Dial(ctx context.Context, net string) (*dns.Conn, error)
 	SetTLSConfig(*tls.Config)
 }
 
@@ -46,12 +48,36 @@ func (t *transportImpl) SetTLSConfig(c *tls.Config) {
 }
 
 // Dial dials the address configured in transportImpl, potentially reusing a connection or creating a new one.
-func (t *transportImpl) Dial(net string) (*dns.Conn, error) {
+func (t *transportImpl) Dial(ctx context.Context, network string) (*dns.Conn, error) {
 	if t.tlsConfig != nil {
-		net = tcptlc
+		network = tcptlc
 	}
-	if net == tcptlc {
-		return dns.DialTimeoutWithTLS("tcp", t.addr, t.tlsConfig, defaultTimeout)
+	if network == tcptlc {
+		return t.dial(ctx, &dns.Client{Net: network, Dialer: &net.Dialer{Timeout: maxTimeout}, TLSConfig: t.tlsConfig})
 	}
-	return dns.DialTimeout(net, t.addr, defaultTimeout)
+	return t.dial(ctx, &dns.Client{Net: network, Dialer: &net.Dialer{Timeout: maxTimeout}})
+}
+
+func (t *transportImpl) dial(ctx context.Context, c *dns.Client) (*dns.Conn, error) {
+	var d net.Dialer
+	if c.Dialer == nil {
+		d = net.Dialer{Timeout: maxTimeout}
+	} else {
+		d = *c.Dialer
+	}
+	network := c.Net
+	if network == "" {
+		network = "udp"
+	}
+	var conn = new(dns.Conn)
+	var err error
+	if network == tcptlc {
+		conn.Conn, err = tls.DialWithDialer(&d, network, t.addr, c.TLSConfig)
+	} else {
+		conn.Conn, err = d.DialContext(ctx, network, t.addr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
 }

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/caddyserver/caddy"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
@@ -131,6 +132,7 @@ func TestFanout_ExceptFile(t *testing.T) {
 }
 
 func (t *fanoutTestSuite) TestConfigFromCorefile() {
+	defer goleak.VerifyNone(t.T())
 	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		ret := new(dns.Msg)
 		ret.SetReply(r)
@@ -160,6 +162,7 @@ func (t *fanoutTestSuite) TestConfigFromCorefile() {
 }
 
 func (t *fanoutTestSuite) TestWorkerCountLessThenServers() {
+	defer goleak.VerifyNone(t.T())
 	const expected = 1
 	answerCount := 0
 	var mutex sync.Mutex
@@ -191,6 +194,7 @@ func (t *fanoutTestSuite) TestWorkerCountLessThenServers() {
 			logErrIfNotNil(w.WriteMsg(&msg))
 		}
 	})
+	defer correctServer.close()
 
 	f.addClient(NewClient(correctServer.addr, t.network))
 	f.workerCount = 1
@@ -205,6 +209,7 @@ func (t *fanoutTestSuite) TestWorkerCountLessThenServers() {
 	t.Equal(answerCount, expected)
 }
 func (t *fanoutTestSuite) TestTwoServersUnsuccessfulResponse() {
+	defer goleak.VerifyNone(t.T())
 	rcode := 1
 	rcodeMutex := sync.Mutex{}
 	s1 := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
@@ -249,11 +254,13 @@ func (t *fanoutTestSuite) TestTwoServersUnsuccessfulResponse() {
 }
 
 func (t *fanoutTestSuite) TestCanReturnUnsuccessfulRepose() {
+	defer goleak.VerifyNone(t.T())
 	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		msg := nxdomainMsg()
 		msg.SetRcode(r, msg.Rcode)
 		logErrIfNotNil(w.WriteMsg(msg))
 	})
+	defer s.close()
 	f := New()
 	f.net = t.network
 	f.from = "."
@@ -269,6 +276,7 @@ func (t *fanoutTestSuite) TestCanReturnUnsuccessfulRepose() {
 }
 
 func (t *fanoutTestSuite) TestBusyServer() {
+	defer goleak.VerifyNone(t.T())
 	var requestNum, answerCount int32
 	totalRequestNum := int32(5)
 	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
@@ -284,6 +292,7 @@ func (t *fanoutTestSuite) TestBusyServer() {
 		}
 		atomic.AddInt32(&requestNum, 1)
 	})
+	defer s.close()
 	c := NewClient(s.addr, t.network)
 	f := New()
 	f.net = t.network
@@ -300,6 +309,7 @@ func (t *fanoutTestSuite) TestBusyServer() {
 }
 
 func (t *fanoutTestSuite) TestTwoServers() {
+	defer goleak.VerifyNone(t.T())
 	const expected = 1
 	var mutex sync.Mutex
 	answerCount1 := 0
@@ -316,6 +326,7 @@ func (t *fanoutTestSuite) TestTwoServers() {
 			logErrIfNotNil(w.WriteMsg(&msg))
 		}
 	})
+	defer s1.close()
 	s2 := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
 		if r.Question[0].Name == "example2." {
 			msg := dns.Msg{
@@ -328,7 +339,6 @@ func (t *fanoutTestSuite) TestTwoServers() {
 			logErrIfNotNil(w.WriteMsg(&msg))
 		}
 	})
-	defer s1.close()
 	defer s2.close()
 
 	c1 := NewClient(s1.addr, t.network)
