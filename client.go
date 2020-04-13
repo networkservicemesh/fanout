@@ -17,6 +17,7 @@
 package fanout
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"time"
@@ -27,7 +28,7 @@ import (
 
 // Client represents the proxy for remote DNS server
 type Client interface {
-	Request(*request.Request) (*dns.Msg, error)
+	Request(context.Context, *request.Request) (*dns.Msg, error)
 	Endpoint() string
 	SetTLSConfig(*tls.Config)
 }
@@ -62,9 +63,10 @@ func (c *client) Endpoint() string {
 }
 
 // Request sends request to DNS server
-func (c *client) Request(r *request.Request) (*dns.Msg, error) {
+func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, error) {
 	start := time.Now()
-	conn, err := c.transport.Dial(c.net)
+
+	conn, err := c.transport.Dial(ctx, c.net)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +81,10 @@ func (c *client) Request(r *request.Request) (*dns.Msg, error) {
 	}
 	logErrIfNotNil(conn.SetReadDeadline(time.Now().Add(readTimeout)))
 	var ret *dns.Msg
+	go func() {
+		<-ctx.Done()
+		_ = conn.Close()
+	}()
 	for {
 		ret, err = conn.ReadMsg()
 		if err != nil {

@@ -249,7 +249,7 @@ func parseProtocol(f *Fanout, c *caddyfile.Dispenser) error {
 		return c.ArgErr()
 	}
 	net := strings.ToLower(c.Val())
-	if net != tcp && net != "udp" && net != tcptlc {
+	if net != tcp && net != udp && net != tcptlc {
 		return errors.New("unknown network protocol")
 	}
 	f.net = net

@@ -67,7 +67,7 @@ func TestDomain_ContainsShouldWorkFast(t *testing.T) {
 	for i := 0; i < 10000; i++ {
 		require.True(t, d.Contains(samples[i]))
 	}
-	require.True(t, time.Since(start) < time.Second/5)
+	require.True(t, time.Since(start) < time.Second/4)
 }
 
 func TestDomainFewEntries(t *testing.T) {
