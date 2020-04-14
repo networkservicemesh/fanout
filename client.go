@@ -65,7 +65,6 @@ func (c *client) Endpoint() string {
 // Request sends request to DNS server
 func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, error) {
 	start := time.Now()
-
 	conn, err := c.transport.Dial(ctx, c.net)
 	if err != nil {
 		return nil, err
@@ -83,7 +82,7 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 	if err = conn.WriteMsg(r.Req); err != nil {
 		return nil, err
 	}
-	if err = conn.SetReadDeadline(time.Now().Add(maxTimeout)); err != nil {
+	if err = conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 		return nil, err
 	}
 	var ret *dns.Msg
