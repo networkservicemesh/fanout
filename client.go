@@ -65,26 +65,28 @@ func (c *client) Endpoint() string {
 // Request sends request to DNS server
 func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, error) {
 	start := time.Now()
-
 	conn, err := c.transport.Dial(ctx, c.net)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		logErrIfNotNil(conn.Close())
+		_ = conn.Close()
 	}()
-
-	logErrIfNotNil(conn.SetWriteDeadline(time.Now().Add(maxTimeout)))
-	if err = conn.WriteMsg(r.Req); err != nil {
-		logErrIfNotNil(err)
-		return nil, err
-	}
-	logErrIfNotNil(conn.SetReadDeadline(time.Now().Add(readTimeout)))
-	var ret *dns.Msg
 	go func() {
 		<-ctx.Done()
 		_ = conn.Close()
 	}()
+	if err = conn.SetWriteDeadline(time.Now().Add(maxTimeout)); err != nil {
+		return nil, err
+	}
+	if err = conn.WriteMsg(r.Req); err != nil {
+		return nil, err
+	}
+	if err = conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		return nil, err
+	}
+	var ret *dns.Msg
+
 	for {
 		ret, err = conn.ReadMsg()
 		if err != nil {
