@@ -17,10 +17,10 @@
 package fanout
 
 import (
-	"context"
+	"net"
+	"strconv"
 	"time"
 
-	"github.com/coredns/coredns/plugin/dnstap"
 	"github.com/coredns/coredns/plugin/dnstap/msg"
 	"github.com/coredns/coredns/request"
 
@@ -35,40 +35,42 @@ func logErrIfNotNil(err error) {
 	log.Error(err)
 }
 
-func toDnstap(ctx context.Context, host, protocol string, state *request.Request, reply *dns.Msg, start time.Time) error {
-	tapper := dnstap.TapperFromContext(ctx)
-	if tapper == nil {
-		return nil
-	}
+func toDnstap(f *Fanout, host string, state *request.Request, reply *dns.Msg, start time.Time) {
 	// Query
-	b := msg.New().Time(start).HostPort(host)
+	q := new(tap.Message)
+	msg.SetQueryTime(q, start)
+	h, p, _ := net.SplitHostPort(host)      // this is preparsed and can't err here
+	port, _ := strconv.ParseUint(p, 10, 32) // same here
+	ip := net.ParseIP(h)
 
-	if protocol == "tcp" {
-		b.SocketProto = tap.SocketProtocol_TCP
-	} else {
-		b.SocketProto = tap.SocketProtocol_UDP
+	var ta net.Addr = &net.UDPAddr{IP: ip, Port: int(port)}
+	t := f.net
+
+	if t == "tcp" {
+		ta = &net.TCPAddr{IP: ip, Port: int(port)}
 	}
 
-	if tapper.Pack() {
-		b.Msg(state.Req)
+	var _ = msg.SetQueryAddress(q, ta)
+
+	if f.tapPlugin.IncludeRawMessage {
+		buf, _ := state.Req.Pack()
+		q.QueryMessage = buf
 	}
-	m, err := b.ToOutsideQuery(tap.Message_FORWARDER_QUERY)
-	if err != nil {
-		return err
-	}
-	tapper.TapMessage(m)
+	msg.SetType(q, tap.Message_FORWARDER_QUERY)
+	f.tapPlugin.TapMessage(q)
 
 	// Response
 	if reply != nil {
-		if tapper.Pack() {
-			b.Msg(reply)
-		}
-		m, err := b.Time(time.Now()).ToOutsideResponse(tap.Message_FORWARDER_RESPONSE)
-		if err != nil {
-			return err
-		}
-		tapper.TapMessage(m)
-	}
+		r := new(tap.Message)
 
-	return nil
+		if f.tapPlugin.IncludeRawMessage {
+			buf, _ := reply.Pack()
+			r.ResponseMessage = buf
+		}
+		msg.SetQueryTime(r, start)
+		var _ = msg.SetQueryAddress(r, ta)
+		msg.SetResponseTime(r, time.Now())
+		msg.SetType(r, tap.Message_FORWARDER_RESPONSE)
+		f.tapPlugin.TapMessage(r)
+	}
 }
