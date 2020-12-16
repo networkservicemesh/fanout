@@ -23,10 +23,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/caddyserver/caddy"
-	"github.com/caddyserver/caddy/caddyfile"
+	"github.com/coredns/caddy"
+	"github.com/coredns/caddy/caddyfile"
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/plugin/dnstap"
 	"github.com/coredns/coredns/plugin/pkg/parse"
 	"github.com/coredns/coredns/plugin/pkg/tls"
 	"github.com/coredns/coredns/plugin/pkg/transport"
@@ -55,7 +56,14 @@ func setup(c *caddy.Controller) error {
 		return f
 	})
 
-	c.OnStartup(f.OnStartup)
+	c.OnStartup(func() error {
+		if taph := dnsserver.GetConfig(c).Handler("dnstap"); taph != nil {
+			if tapPlugin, ok := taph.(dnstap.Dnstap); ok {
+				f.tapPlugin = &tapPlugin
+			}
+		}
+		return f.OnStartup()
+	})
 	c.OnShutdown(f.OnShutdown)
 
 	return nil
