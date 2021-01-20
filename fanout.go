@@ -78,12 +78,17 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	defer cancel()
 	clientCount := len(f.clients)
 	workerChannel := make(chan Client, f.workerCount)
-	defer close(workerChannel)
 	responseCh := make(chan *response, clientCount)
 	go func() {
+		defer close(workerChannel)
 		for i := 0; i < clientCount; i++ {
 			client := f.clients[i]
-			workerChannel <- client
+			select {
+			case <-timeoutContext.Done():
+				return
+			case workerChannel <- client:
+				continue
+			}
 		}
 	}()
 	for i := 0; i < f.workerCount; i++ {
