@@ -25,6 +25,7 @@ import (
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/debug"
 	"github.com/coredns/coredns/plugin/dnstap"
+	"github.com/coredns/coredns/plugin/metadata"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
@@ -102,6 +103,9 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	if result == nil {
 		return dns.RcodeServerFailure, timeoutContext.Err()
 	}
+	metadata.SetValueFunc(ctx, "fanout/upstream", func() string {
+		return result.client.Endpoint()
+	})
 	if result.err != nil {
 		return dns.RcodeServerFailure, result.err
 	}
