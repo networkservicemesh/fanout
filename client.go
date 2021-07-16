@@ -68,8 +68,9 @@ func (c *client) Endpoint() string {
 func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, error) {
 	span := ot.SpanFromContext(ctx)
 	if span != nil {
-		childSpan := span.Tracer().StartSpan("connect", ot.ChildOf(span.Context()))
+		childSpan := span.Tracer().StartSpan("request", ot.ChildOf(span.Context()))
 		otext.PeerAddress.Set(childSpan, c.addr)
+		ctx = ot.ContextWithSpan(ctx, childSpan)
 		defer childSpan.Finish()
 	}
 	start := time.Now()

@@ -22,6 +22,7 @@ import (
 	"net"
 
 	"github.com/miekg/dns"
+	ot "github.com/opentracing/opentracing-go"
 )
 
 // Transport represent a solution to connect to remote DNS endpoint with specific network
@@ -59,6 +60,12 @@ func (t *transportImpl) Dial(ctx context.Context, network string) (*dns.Conn, er
 }
 
 func (t *transportImpl) dial(ctx context.Context, c *dns.Client) (*dns.Conn, error) {
+	span := ot.SpanFromContext(ctx)
+	if span != nil {
+		childSpan := span.Tracer().StartSpan("connect", ot.ChildOf(span.Context()))
+		ctx = ot.ContextWithSpan(ctx, childSpan)
+		defer childSpan.Finish()
+	}
 	var d net.Dialer
 	if c.Dialer == nil {
 		d = net.Dialer{Timeout: maxTimeout}
