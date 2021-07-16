@@ -7,6 +7,7 @@ require (
 	github.com/coredns/coredns v1.8.0
 	github.com/dnstap/golang-dnstap v0.2.2
 	github.com/miekg/dns v1.1.34
+	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.8.0
 	github.com/stretchr/testify v1.5.1

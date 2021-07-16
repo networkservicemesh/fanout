@@ -24,6 +24,8 @@ import (
 
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
+	ot "github.com/opentracing/opentracing-go"
+	otext "github.com/opentracing/opentracing-go/ext"
 )
 
 // Client represents the proxy for remote DNS server
@@ -64,6 +66,12 @@ func (c *client) Endpoint() string {
 
 // Request sends request to DNS server
 func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, error) {
+	span := ot.SpanFromContext(ctx)
+	if span != nil {
+		childSpan := span.Tracer().StartSpan("connect", ot.ChildOf(span.Context()))
+		otext.PeerAddress.Set(childSpan, c.addr)
+		defer childSpan.Finish()
+	}
 	start := time.Now()
 	conn, err := c.transport.Dial(ctx, c.net)
 	if err != nil {
