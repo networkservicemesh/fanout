@@ -19,7 +19,6 @@ package fanout
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"time"
 
 	"github.com/coredns/coredns/plugin"
@@ -29,6 +28,7 @@ import (
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
+	"github.com/pkg/errors"
 )
 
 var log = clog.NewWithPlugin("fanout")
@@ -158,11 +158,13 @@ func (f *Fanout) match(state *request.Request) bool {
 
 func (f *Fanout) processClient(ctx context.Context, c Client, r *request.Request) *response {
 	start := time.Now()
+	var err error
 	for j := 0; j < f.attempts || f.attempts == 0; <-time.After(attemptDelay) {
 		if ctx.Err() != nil {
 			return &response{client: c, response: nil, start: start, err: ctx.Err()}
 		}
-		msg, err := c.Request(ctx, r)
+		var msg *dns.Msg
+		msg, err = c.Request(ctx, r)
 		if err == nil {
 			return &response{client: c, response: msg, start: start, err: err}
 		}
@@ -170,5 +172,5 @@ func (f *Fanout) processClient(ctx context.Context, c Client, r *request.Request
 			j++
 		}
 	}
-	return &response{client: c, response: nil, start: start, err: errors.New("attempt limit has been reached")}
+	return &response{client: c, response: nil, start: start, err: errors.Wrapf(err, "attempt limit has been reached, last err")}
 }
