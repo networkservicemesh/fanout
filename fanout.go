@@ -75,7 +75,7 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	if !f.match(&req) {
 		return plugin.NextOrFailure(f.Name(), f.Next, ctx, w, m)
 	}
-	timeoutContext, cancel := context.WithTimeout(ctx, defaultTimeout)
+	timeoutContext, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 	clientCount := len(f.clients)
 	workerChannel := make(chan Client, f.workerCount)
