@@ -36,9 +36,6 @@ If monitoring is enabled (via the *prometheus* plugin) then the following metric
 * `coredns_fanout_request_duration_seconds{to}` - duration per upstream interaction.
 * `coredns_fanout_request_count_total{to}` - query count per upstream.
 * `coredns_fanout_response_rcode_count_total{to, rcode}` - count of RCODEs per upstream.
-* `coredns_fanout_healthcheck_failure_count_total{to}` - number of failed health checks per upstream.
-* `coredns_fanout_healthcheck_broken_count_total{}` - counter of when all upstreams are unhealthy,
-  and we are randomly (this always uses the `random` policy) spraying to an upstream.
 
 Where `to` is one of the upstream servers (**TO** from the config), `rcode` is the returned RCODE
 from the upstream.

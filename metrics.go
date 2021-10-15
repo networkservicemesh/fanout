@@ -43,16 +43,4 @@ var (
 		Buckets:   plugin.TimeBuckets,
 		Help:      "Histogram of the time each request took.",
 	}, []string{"to"})
-	HealthcheckFailureCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Namespace: plugin.Namespace,
-		Subsystem: "fanout",
-		Name:      "healthcheck_failure_count_total",
-		Help:      "Counter of the number of failed healthchecks.",
-	}, []string{"to"})
-	HealthcheckBrokenCount = promauto.NewCounter(prometheus.CounterOpts{
-		Namespace: plugin.Namespace,
-		Subsystem: "fanout",
-		Name:      "healthcheck_broken_count_total",
-		Help:      "Counter of the number of complete failures of the healthchecks.",
-	})
 )
