@@ -172,5 +172,5 @@ func (f *Fanout) processClient(ctx context.Context, c Client, r *request.Request
 			j++
 		}
 	}
-	return &response{client: c, response: nil, start: start, err: errors.Wrapf(err, "attempt limit has been reached, last err")}
+	return &response{client: c, response: nil, start: start, err: errors.Wrapf(err, "attempt limit has been reached")}
 }

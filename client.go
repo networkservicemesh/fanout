@@ -78,6 +78,13 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 	if err != nil {
 		return nil, err
 	}
+
+	//Set buffer size correctly for this conn.
+	conn.UDPSize = uint16(r.Size())
+	if conn.UDPSize < 512 {
+		conn.UDPSize = 512
+	}
+
 	defer func() {
 		_ = conn.Close()
 	}()
