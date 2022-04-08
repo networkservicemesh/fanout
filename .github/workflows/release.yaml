@@ -1,0 +1,69 @@
+---
+name: Release
+
+on:
+  workflow_run:
+    types:
+      - completed
+    workflows:
+      - "ci"
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_branch, 'release/') }}
+    outputs:
+      tag: ${{ needs.check-gomod-deps.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: refs/heads/${{github.event.workflow_run.head_branch}}
+
+      - name: Push tag ${{ needs.check-gomod-deps.outputs.tag }}
+        run: |
+          git status
+          git tag ${{ needs.check-gomod-deps.outputs.tag }}
+          git push origin ${{ needs.check-gomod-deps.outputs.tag }} -f
+      - name: Create release ${{ needs.check-gomod-deps.outputs.tag }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.NSM_BOT_GITHUB_TOKEN }}
+        with:
+          tag_name: refs/tags/${{ needs.check-gomod-deps.outputs.tag }}
+          release_name: ${{ needs.check-gomod-deps.outputs.tag }}
+          draft: false
+          prerelease: false
+
+  docker:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_branch, 'release/') }}
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v2
+        with:
+          ref: refs/heads/${{github.event.workflow_run.head_branch}}
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v1
+
+      - name: "Login to GitHub Container Registry"
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get tag
+        run: |
+          branch=${{github.event.workflow_run.head_branch}}
+          echo '::set-output name=tag::'${branch#release/}
+        id: get-tag-step
+
+      - name: "Build and push"
+        uses: docker/build-push-action@v2
+        with:
+          file: Dockerfile
+          context: .
+          push: true
+          tags: "ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.get-tag-step.outputs.tag }}"
