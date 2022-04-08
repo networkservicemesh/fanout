@@ -37,7 +37,7 @@ jobs:
         id: metaci
         uses: docker/metadata-action@v3
         with:
-          images: ghcr.io/${{ github.repository_owner }}/ci/${{ github.event.repository.name }}
+          images: ghcr.io/${{ github.repository_owner }}/ci/coredns
           tags: |
             type=ref,event=pr
             type=sha,prefix=
