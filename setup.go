@@ -161,6 +161,8 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 		return parseWorkerCount(f, c)
 	case "timeout":
 		return parseTimeout(f, c)
+	case "race":
+		return parseRace(f, c)
 	case "except":
 		return parseIgnored(f, c)
 	case "except-file":
@@ -182,6 +184,14 @@ func parseTimeout(f *Fanout, c *caddyfile.Dispenser) error {
 	val := c.Val()
 	f.timeout, err = time.ParseDuration(val)
 	return err
+}
+
+func parseRace(f *Fanout, c *caddyfile.Dispenser) error {
+	if c.NextArg() {
+		return c.ArgErr()
+	}
+	f.race = true
+	return nil
 }
 
 func parseIgnoredFromFile(f *Fanout, c *caddyfile.Dispenser) error {
