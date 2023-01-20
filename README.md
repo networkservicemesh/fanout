@@ -29,6 +29,7 @@ Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated i
 * `except-file` is the path to file with line-separated list of domains to exclude from proxying.
 * `attempt-count` is the number of attempts to connect to upstream servers that are needed before considering an upstream to be down. If 0, the upstream will never be marked as down and request will be finished by `timeout`. Default is `3`.
 * `timeout` is the timeout of request. After this period, attempts to receive a response from the upstream servers will be stopped. Default is `30s`.
+* `race` gives priority to the first result, whether it is negative or not, as long as it is a standard DNS result.
 ## Metrics
 
 If monitoring is enabled (via the *prometheus* plugin) then the following metric are exported:
@@ -96,6 +97,16 @@ Sends parallel requests between five resolvers via UDP uses two workers and with
 . {
     fanout . 10.0.0.10:53 10.0.0.11:53 10.0.0.12:53 10.0.0.13:1053 10.0.0.14:1053 {
         worker-count 2
+    }
+}
+~~~
+
+Multiple upstream servers are configured but one of them is down, query a `non-existent` domain.
+If `race` is enable, we will get `NXDOMAIN` result quickly, otherwise we will get `"connection timed out"` result in a few seconds.
+~~~ corefile
+. {
+    fanout . 10.0.0.10:53 10.0.0.11:53 10.0.0.12:53 10.0.0.13:1053 10.0.0.14:1053 {
+        race
     }
 }
 ~~~

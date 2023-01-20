@@ -40,6 +40,7 @@ type Fanout struct {
 	excludeDomains Domain
 	tlsServerName  string
 	timeout        time.Duration
+	race           bool
 	net            string
 	from           string
 	attempts       int
@@ -140,6 +141,9 @@ func (f *Fanout) getFanoutResult(ctx context.Context, responseCh <-chan *respons
 			}
 			if r.err != nil {
 				break
+			}
+			if f.race {
+				return r
 			}
 			if r.response.Rcode != dns.RcodeSuccess {
 				break
