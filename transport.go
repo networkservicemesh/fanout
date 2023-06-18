@@ -51,9 +51,9 @@ func (t *transportImpl) SetTLSConfig(c *tls.Config) {
 // Dial dials the address configured in transportImpl, potentially reusing a connection or creating a new one.
 func (t *transportImpl) Dial(ctx context.Context, network string) (*dns.Conn, error) {
 	if t.tlsConfig != nil {
-		network = tcptlc
+		network = tcptls
 	}
-	if network == tcptlc {
+	if network == tcptls {
 		return t.dial(ctx, &dns.Client{Net: network, Dialer: &net.Dialer{Timeout: maxTimeout}, TLSConfig: t.tlsConfig})
 	}
 	return t.dial(ctx, &dns.Client{Net: network, Dialer: &net.Dialer{Timeout: maxTimeout}})
@@ -78,7 +78,7 @@ func (t *transportImpl) dial(ctx context.Context, c *dns.Client) (*dns.Conn, err
 	}
 	var conn = new(dns.Conn)
 	var err error
-	if network == tcptlc {
+	if network == tcptls {
 		conn.Conn, err = tls.DialWithDialer(&d, "tcp", t.addr, c.TLSConfig)
 	} else {
 		conn.Conn, err = d.DialContext(ctx, network, t.addr)
