@@ -79,7 +79,7 @@ func (t *transportImpl) dial(ctx context.Context, c *dns.Client) (*dns.Conn, err
 	var conn = new(dns.Conn)
 	var err error
 	if network == tcptlc {
-		conn.Conn, err = tls.DialWithDialer(&d, network, t.addr, c.TLSConfig)
+		conn.Conn, err = tls.DialWithDialer(&d, "tcp", t.addr, c.TLSConfig)
 	} else {
 		conn.Conn, err = d.DialContext(ctx, network, t.addr)
 	}
