@@ -101,10 +101,10 @@ func parseFanout(c *caddy.Controller) (*Fanout, error) {
 
 func parsefanoutStanza(c *caddyfile.Dispenser) (*Fanout, error) {
 	f := New()
-	if !c.Args(&f.from) {
+	if !c.NextArg() {
 		return f, c.ArgErr()
 	}
-	f.from = plugin.Host(f.from).Normalize()
+	f.from = plugin.Host(c.Val()).NormalizeExact()[0]
 	to := c.RemainingArgs()
 	if len(to) == 0 {
 		return f, c.ArgErr()
