@@ -1,6 +1,8 @@
 module github.com/networkservicemesh/fanout/coredns
 
-go 1.17
+go 1.21
+
+toolchain go1.22.4
 
 require (
 	github.com/coredns/coredns v1.9.1

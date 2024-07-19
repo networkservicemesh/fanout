@@ -17,7 +17,6 @@
 package fanout
 
 import (
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -48,8 +47,10 @@ func TestSetup(t *testing.T) {
 
 		// negative
 		{input: "fanout . aaa", expectedErr: "not an IP address or file"},
+		{input: "fanout .: aaa", expectedErr: "unable to normalize '.:'"},
 		{input: "fanout . 127.0.0.1 {\nexcept a b\nworker-count 1\n}", expectedErr: "use Forward plugin"},
 		{input: "fanout . 127.0.0.1 {\nexcept a b\nworker-count ten\n}", expectedErr: "'ten'"},
+		{input: "fanout . 127.0.0.1 {\nexcept a:\nworker-count ten\n}", expectedErr: "unable to normalize 'a:'"},
 		{input: "fanout . 127.0.0.1 127.0.0.2 {\nnetwork XXX\n}", expectedErr: "unknown network protocol"},
 	}
 
@@ -102,7 +103,7 @@ func TestSetup(t *testing.T) {
 
 func TestSetupResolvconf(t *testing.T) {
 	const resolv = "resolv.conf"
-	if err := ioutil.WriteFile(resolv,
+	if err := os.WriteFile(resolv,
 		[]byte(`nameserver 10.10.255.252
 nameserver 10.10.255.253`), 0600); err != nil {
 		t.Fatalf("Failed to write resolv.conf file: %s", err)

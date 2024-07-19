@@ -17,7 +17,8 @@
 package fanout
 
 import (
-	"io/ioutil"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -58,8 +59,8 @@ func setup(c *caddy.Controller) error {
 
 	c.OnStartup(func() error {
 		if taph := dnsserver.GetConfig(c).Handler("dnstap"); taph != nil {
-			if tapPlugin, ok := taph.(dnstap.Dnstap); ok {
-				f.tapPlugin = &tapPlugin
+			if tapPlugin, ok := taph.(*dnstap.Dnstap); ok {
+				f.tapPlugin = tapPlugin
 			}
 		}
 		return f.OnStartup()
@@ -104,7 +105,13 @@ func parsefanoutStanza(c *caddyfile.Dispenser) (*Fanout, error) {
 	if !c.Args(&f.from) {
 		return f, c.ArgErr()
 	}
-	f.from = plugin.Host(f.from).Normalize()
+
+	normalized := plugin.Host(f.from).NormalizeExact()
+	if len(normalized) == 0 {
+		return nil, fmt.Errorf("unable to normalize '%s'", f.from)
+	}
+
+	f.from = normalized[0]
 	to := c.RemainingArgs()
 	if len(to) == 0 {
 		return f, c.ArgErr()
@@ -199,13 +206,17 @@ func parseIgnoredFromFile(f *Fanout, c *caddyfile.Dispenser) error {
 	if len(args) != 1 {
 		return c.ArgErr()
 	}
-	b, err := ioutil.ReadFile(filepath.Clean(args[0]))
+	b, err := os.ReadFile(filepath.Clean(args[0]))
 	if err != nil {
 		return err
 	}
 	names := strings.Split(string(b), "\n")
 	for i := 0; i < len(names); i++ {
-		f.excludeDomains.AddString(plugin.Host(names[i]).Normalize())
+		normalized := plugin.Host(names[i]).NormalizeExact()
+		if len(normalized) == 0 {
+			return fmt.Errorf("unable to normalize '%s'", names[i])
+		}
+		f.excludeDomains.AddString(normalized[0])
 	}
 	return nil
 }
@@ -216,7 +227,11 @@ func parseIgnored(f *Fanout, c *caddyfile.Dispenser) error {
 		return c.ArgErr()
 	}
 	for i := 0; i < len(ignore); i++ {
-		f.excludeDomains.AddString(plugin.Host(ignore[i]).Normalize())
+		normalized := plugin.Host(ignore[i]).NormalizeExact()
+		if len(normalized) == 0 {
+			return fmt.Errorf("unable to normalize '%s'", ignore[i])
+		}
+		f.excludeDomains.AddString(normalized[0])
 	}
 	return nil
 }
