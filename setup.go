@@ -130,7 +130,7 @@ func parsefanoutStanza(c *caddyfile.Dispenser) (*Fanout, error) {
 		f.serverCount = len(toHosts)
 	}
 	if len(f.loadFactor) == 0 {
-		for range len(toHosts) {
+		for i := 0; i < len(toHosts); i++ {
 			f.loadFactor = append(f.loadFactor, maxLoadFactor)
 		}
 	}

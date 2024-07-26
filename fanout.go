@@ -124,7 +124,7 @@ func (f *Fanout) runWorkers(ctx context.Context, req *request.Request) chan *res
 	responseCh := make(chan *response, f.serverCount)
 	go func() {
 		defer close(workerChannel)
-		for range f.serverCount {
+		for i := 0; i < f.serverCount; i++ {
 			select {
 			case <-ctx.Done():
 				return
@@ -137,7 +137,7 @@ func (f *Fanout) runWorkers(ctx context.Context, req *request.Request) chan *res
 		var wg sync.WaitGroup
 		wg.Add(f.workerCount)
 
-		for range f.workerCount {
+		for i := 0; i < f.workerCount; i++ {
 			go func() {
 				defer wg.Done()
 				for c := range workerChannel {

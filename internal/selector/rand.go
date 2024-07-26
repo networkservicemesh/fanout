@@ -17,7 +17,10 @@
 // Package selector implements weighted random selection algorithm
 package selector
 
-import "math/rand/v2"
+import (
+	"math/rand"
+	"time"
+)
 
 // WeightedRand selector picks elements randomly based on their weights
 type WeightedRand[T any] struct {
@@ -34,7 +37,7 @@ func NewWeightedRandSelector[T any](values []T, weights []int) *WeightedRand[T] 
 		weights:     make([]int, len(weights)),
 		totalWeight: 0,
 		//nolint:gosec // it's overhead to use crypto/rand here
-		r: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
+		r: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	// copy the underlying array values as we're going to modify content of slices
 	copy(wrs.values, values)
@@ -54,10 +57,10 @@ func (wrs *WeightedRand[T]) Pick() T {
 		return defaultVal
 	}
 
-	rNum := wrs.r.IntN(wrs.totalWeight) + 1
+	rNum := wrs.r.Intn(wrs.totalWeight) + 1
 
 	sum := 0
-	for i := range len(wrs.values) {
+	for i := 0; i < len(wrs.values); i++ {
 		sum += wrs.weights[i]
 		if sum >= rNum {
 			wrs.totalWeight -= wrs.weights[i]

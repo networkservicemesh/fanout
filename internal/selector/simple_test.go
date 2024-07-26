@@ -35,7 +35,7 @@ func TestSimple_Pick(t *testing.T) {
 			wrs := NewSimpleSelector(tc.values)
 
 			actual := make([]string, 0, tc.picksCount)
-			for range tc.picksCount {
+			for i := 0; i < tc.picksCount; i++ {
 				actual = append(actual, wrs.Pick())
 			}
 
