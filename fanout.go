@@ -19,6 +19,7 @@ package fanout
 import (
 	"context"
 	"crypto/tls"
+	"sync"
 	"time"
 
 	"github.com/coredns/coredns/plugin"
@@ -28,6 +29,7 @@ import (
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
+	"github.com/networkservicemesh/fanout/internal/selector"
 	"github.com/pkg/errors"
 )
 
@@ -45,6 +47,8 @@ type Fanout struct {
 	from           string
 	attempts       int
 	workerCount    int
+	serverCount    int
+	loadFactor     []int
 	tapPlugin      *dnstap.Dnstap
 	Next           plugin.Handler
 }
@@ -62,7 +66,9 @@ func New() *Fanout {
 
 func (f *Fanout) addClient(p Client) {
 	f.clients = append(f.clients, p)
+	f.loadFactor = append(f.loadFactor, maxLoadFactor)
 	f.workerCount++
+	f.serverCount++
 }
 
 // Name implements plugin.Handler.
@@ -78,29 +84,7 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	}
 	timeoutContext, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
-	clientCount := len(f.clients)
-	workerChannel := make(chan Client, f.workerCount)
-	responseCh := make(chan *response, clientCount)
-	go func() {
-		defer close(workerChannel)
-		for i := 0; i < clientCount; i++ {
-			client := f.clients[i]
-			select {
-			case <-timeoutContext.Done():
-				return
-			case workerChannel <- client:
-				continue
-			}
-		}
-	}()
-	for i := 0; i < f.workerCount; i++ {
-		go func() {
-			for c := range workerChannel {
-				responseCh <- f.processClient(timeoutContext, c, &request.Request{W: w, Req: m})
-			}
-		}()
-	}
-	result := f.getFanoutResult(timeoutContext, responseCh)
+	result := f.getFanoutResult(timeoutContext, f.runWorkers(timeoutContext, &req))
 	if result == nil {
 		return dns.RcodeServerFailure, timeoutContext.Err()
 	}
@@ -124,20 +108,67 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	return 0, nil
 }
 
+type clientSelector interface {
+	Pick() Client
+}
+
+func (f *Fanout) runWorkers(ctx context.Context, req *request.Request) chan *response {
+	var sel clientSelector
+	if f.serverCount == len(f.clients) {
+		sel = selector.NewSimpleSelector(f.clients)
+	} else {
+		sel = selector.NewWeightedRandSelector(f.clients, f.loadFactor)
+	}
+
+	workerChannel := make(chan Client, f.workerCount)
+	responseCh := make(chan *response, f.serverCount)
+	go func() {
+		defer close(workerChannel)
+		for range f.serverCount {
+			select {
+			case <-ctx.Done():
+				return
+			case workerChannel <- sel.Pick():
+			}
+		}
+	}()
+
+	go func() {
+		var wg sync.WaitGroup
+		wg.Add(f.workerCount)
+
+		for range f.workerCount {
+			go func() {
+				defer wg.Done()
+				for c := range workerChannel {
+					select {
+					case <-ctx.Done():
+						return
+					case responseCh <- f.processClient(ctx, c, &request.Request{W: req.W, Req: req.Req}):
+					}
+				}
+			}()
+		}
+
+		wg.Wait()
+		close(responseCh)
+	}()
+
+	return responseCh
+}
+
 func (f *Fanout) getFanoutResult(ctx context.Context, responseCh <-chan *response) *response {
-	count := len(f.clients)
 	var result *response
 	for {
 		select {
 		case <-ctx.Done():
 			return result
-		case r := <-responseCh:
-			count--
+		case r, ok := <-responseCh:
+			if !ok {
+				return result
+			}
 			if isBetter(result, r) {
 				result = r
-			}
-			if count == 0 {
-				return result
 			}
 			if r.err != nil {
 				break

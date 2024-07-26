@@ -14,21 +14,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package fanout
+package selector
 
-import "time"
+// Simple selector acts like a queue and picks elements one-by-one starting from the first element
+type Simple[T any] struct {
+	values []T
+	idx    int
+}
 
-const (
-	maxIPCount     = 100
-	maxLoadFactor  = 100
-	minLoadFactor  = 1
-	maxWorkerCount = 32
-	minWorkerCount = 2
-	maxTimeout     = 2 * time.Second
-	defaultTimeout = 30 * time.Second
-	readTimeout    = 2 * time.Second
-	attemptDelay   = time.Millisecond * 100
-	tcptls         = "tcp-tls"
-	tcp            = "tcp"
-	udp            = "udp"
-)
+// NewSimpleSelector inits Simple selector with default starting index 0
+func NewSimpleSelector[T any](values []T) *Simple[T] {
+	return &Simple[T]{
+		values: values,
+		idx:    0,
+	}
+}
+
+// Pick returns next available element from values array if exists.
+// Returns default value of type T otherwise
+func (s *Simple[T]) Pick() T {
+	var result T
+	if s.idx >= len(s.values) {
+		return result
+	}
+
+	result = s.values[s.idx]
+	s.idx++
+
+	return result
+}
