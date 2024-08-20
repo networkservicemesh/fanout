@@ -1,5 +1,7 @@
 // Copyright (c) 2020 Doc.ai and/or its affiliates.
 //
+// Copyright (c) 2024 MWS and/or its affiliates.
+//
 // SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,10 +58,11 @@ func TestSetup(t *testing.T) {
 		{input: "fanout . 127.0.0.1 {\nexcept a:\nworker-count ten\n}", expectedErr: "unable to normalize 'a:'"},
 		{input: "fanout . 127.0.0.1 127.0.0.2 {\nnetwork XXX\n}", expectedErr: "unknown network protocol"},
 		{input: "fanout . 127.0.0.1 {\nserver-count -100\n}", expectedErr: "Wrong argument count or unexpected line ending"},
-		{input: "fanout . 127.0.0.1 {\nload-factor 150\n}", expectedErr: "load-factor more then max value: 100"},
+		{input: "fanout . 127.0.0.1 {\nload-factor 150\n}", expectedErr: "load-factor 150 should be less than 100"},
 		{input: "fanout . 127.0.0.1 {\nload-factor 0\n}", expectedErr: "load-factor should be more or equal 1"},
 		{input: "fanout . 127.0.0.1 {\nload-factor 50 100\n}", expectedErr: "load-factor params count must be the same as the number of hosts"},
 		{input: "fanout . 127.0.0.1 127.0.0.2 {\nload-factor 50\n}", expectedErr: "load-factor params count must be the same as the number of hosts"},
+		{input: "fanout . 127.0.0.1 127.0.0.2 {\nload-factor \n}", expectedErr: "Wrong argument count or unexpected line ending"},
 	}
 
 	for i, test := range tests {

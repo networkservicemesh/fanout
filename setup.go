@@ -1,5 +1,7 @@
 // Copyright (c) 2020 Doc.ai and/or its affiliates.
 //
+// Copyright (c) 2024 MWS and/or its affiliates.
+//
 // SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -277,7 +279,7 @@ func parseLoadFactor(f *Fanout, c *caddyfile.Dispenser) error {
 			return errors.New("load-factor should be more or equal 1")
 		}
 		if loadFactor > maxLoadFactor {
-			return errors.Errorf("load-factor more then max value: %d", maxLoadFactor)
+			return errors.Errorf("load-factor %d should be less than %d", loadFactor, maxLoadFactor)
 		}
 
 		f.loadFactor = append(f.loadFactor, loadFactor)

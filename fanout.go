@@ -1,5 +1,7 @@
 // Copyright (c) 2020 Doc.ai and/or its affiliates.
 //
+// Copyright (c) 2024 MWS and/or its affiliates.
+//
 // SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -120,15 +122,15 @@ func (f *Fanout) runWorkers(ctx context.Context, req *request.Request) chan *res
 		sel = selector.NewWeightedRandSelector(f.clients, f.loadFactor)
 	}
 
-	workerChannel := make(chan Client, f.workerCount)
+	workerCh := make(chan Client, f.workerCount)
 	responseCh := make(chan *response, f.serverCount)
 	go func() {
-		defer close(workerChannel)
+		defer close(workerCh)
 		for i := 0; i < f.serverCount; i++ {
 			select {
 			case <-ctx.Done():
 				return
-			case workerChannel <- sel.Pick():
+			case workerCh <- sel.Pick():
 			}
 		}
 	}()
@@ -140,7 +142,7 @@ func (f *Fanout) runWorkers(ctx context.Context, req *request.Request) chan *res
 		for i := 0; i < f.workerCount; i++ {
 			go func() {
 				defer wg.Done()
-				for c := range workerChannel {
+				for c := range workerCh {
 					select {
 					case <-ctx.Done():
 						return
