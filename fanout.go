@@ -31,7 +31,6 @@ import (
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
-	"github.com/networkservicemesh/fanout/internal/selector"
 	"github.com/pkg/errors"
 )
 
@@ -39,36 +38,36 @@ var log = clog.NewWithPlugin("fanout")
 
 // Fanout represents a plugin instance that can do async requests to list of DNS servers.
 type Fanout struct {
-	clients        []Client
-	tlsConfig      *tls.Config
-	excludeDomains Domain
-	tlsServerName  string
-	timeout        time.Duration
-	race           bool
-	net            string
-	from           string
-	attempts       int
-	workerCount    int
-	serverCount    int
-	loadFactor     []int
-	tapPlugin      *dnstap.Dnstap
-	Next           plugin.Handler
+	clients               []Client
+	tlsConfig             *tls.Config
+	excludeDomains        Domain
+	tlsServerName         string
+	timeout               time.Duration
+	race                  bool
+	net                   string
+	from                  string
+	attempts              int
+	workerCount           int
+	serverCount           int
+	serverSelectionPolicy policy
+	tapPlugin             *dnstap.Dnstap
+	Next                  plugin.Handler
 }
 
 // New returns reference to new Fanout plugin instance with default configs.
 func New() *Fanout {
 	return &Fanout{
-		tlsConfig:      new(tls.Config),
-		net:            "udp",
-		attempts:       3,
-		timeout:        defaultTimeout,
-		excludeDomains: NewDomain(),
+		tlsConfig:             new(tls.Config),
+		net:                   "udp",
+		attempts:              3,
+		timeout:               defaultTimeout,
+		excludeDomains:        NewDomain(),
+		serverSelectionPolicy: &sequentialPolicy{}, // default policy
 	}
 }
 
 func (f *Fanout) addClient(p Client) {
 	f.clients = append(f.clients, p)
-	f.loadFactor = append(f.loadFactor, maxLoadFactor)
 	f.workerCount++
 	f.serverCount++
 }
@@ -110,18 +109,8 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	return 0, nil
 }
 
-type clientSelector interface {
-	Pick() Client
-}
-
 func (f *Fanout) runWorkers(ctx context.Context, req *request.Request) chan *response {
-	var sel clientSelector
-	if f.serverCount == len(f.clients) {
-		sel = selector.NewSimpleSelector(f.clients)
-	} else {
-		sel = selector.NewWeightedRandSelector(f.clients, f.loadFactor)
-	}
-
+	sel := f.serverSelectionPolicy.selector(f.clients)
 	workerCh := make(chan Client, f.workerCount)
 	responseCh := make(chan *response, f.serverCount)
 	go func() {

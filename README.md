@@ -24,8 +24,11 @@ Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated i
   (Cloudflare) will not work.
 
 * `worker-count` is the number of parallel queries per request. By default equals to count of IP list. Use this only for reducing parallel queries per request.
-* `server-count` is the number of DNS servers to be requested. Equals to the number of specified IPs by default. If this parameter is lower than the number of specified IP addresses, servers are randomly selected based on the `load-factor` parameter.
-* `load-factor` - the probability of selecting a server. This is specified in the order of the list of IP addresses and takes values between 1 and 100. By default, all servers have an equal probability of 100.
+* `policy` - specifies the policy of DNS server selection mechanism. The default is `sequential`.
+  * `sequential` - select DNS servers one-by-one based on its order
+  * `weighted-random` - select DNS servers randomly based on `server-count` and `load-factor` params:
+    * `server-count` is the number of DNS servers to be requested. Equals to the number of specified IPs by default.
+    * `load-factor` - the probability of selecting a server. This is specified in the order of the list of IP addresses and takes values between 1 and 100. By default, all servers have an equal probability of 100.
 * `network` is a specific network protocol. Could be `tcp`, `udp`, `tcp-tls`.
 * `except` is a list is a space-separated list of domains to exclude from proxying.
 * `except-file` is the path to file with line-separated list of domains to exclude from proxying.
@@ -110,5 +113,24 @@ If `race` is enable, we will get `NXDOMAIN` result quickly, otherwise we will ge
     fanout . 10.0.0.10:53 10.0.0.11:53 10.0.0.12:53 10.0.0.13:1053 10.0.0.14:1053 {
         race
     }
+}
+~~~
+
+Sends parallel requests between two randomly selected resolvers. Note, that `127.0.0.1:9007` would be selected more frequently as it has the highest `load-factor`.
+~~~ corefile
+example.org {
+    fanout . 127.0.0.1:9005 127.0.0.1:9006 127.0.0.1:9007
+    policy weighted-random {
+      server-count 2
+      load-factor 50 70 100
+    }
+}
+~~~
+
+Sends parallel requests between three resolver sequentially (default mode).
+~~~ corefile
+example.org {
+    fanout . 127.0.0.1:9005 127.0.0.1:9006 127.0.0.1:9007
+    policy sequential
 }
 ~~~

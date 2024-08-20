@@ -47,7 +47,7 @@ func TestSimple_Pick(t *testing.T) {
 	}
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			wrs := NewSimpleSelector(tc.values)
+			wrs := NewSequentialSelector(tc.values)
 
 			actual := make([]string, 0, tc.picksCount)
 			for i := 0; i < tc.picksCount; i++ {

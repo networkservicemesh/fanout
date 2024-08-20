@@ -16,15 +16,15 @@
 
 package selector
 
-// Simple selector acts like a queue and picks elements one-by-one starting from the first element
-type Simple[T any] struct {
+// Sequential selector acts like a queue and picks elements one-by-one starting from the first element
+type Sequential[T any] struct {
 	values []T
 	idx    int
 }
 
-// NewSimpleSelector inits Simple selector with default starting index 0
-func NewSimpleSelector[T any](values []T) *Simple[T] {
-	return &Simple[T]{
+// NewSequentialSelector inits Sequential selector with default starting index 0
+func NewSequentialSelector[T any](values []T) *Sequential[T] {
+	return &Sequential[T]{
 		values: values,
 		idx:    0,
 	}
@@ -32,7 +32,7 @@ func NewSimpleSelector[T any](values []T) *Simple[T] {
 
 // Pick returns next available element from values array if exists.
 // Returns default value of type T otherwise
-func (s *Simple[T]) Pick() T {
+func (s *Sequential[T]) Pick() T {
 	var result T
 	if s.idx >= len(s.values) {
 		return result
