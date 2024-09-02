@@ -26,9 +26,9 @@ Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated i
 * `worker-count` is the number of parallel queries per request. By default equals to count of IP list. Use this only for reducing parallel queries per request.
 * `policy` - specifies the policy of DNS server selection mechanism. The default is `sequential`.
   * `sequential` - select DNS servers one-by-one based on its order
-  * `weighted-random` - select DNS servers randomly based on `server-count` and `load-factor` params:
-    * `server-count` is the number of DNS servers to be requested. Equals to the number of specified IPs by default.
-    * `load-factor` - the probability of selecting a server. This is specified in the order of the list of IP addresses and takes values between 1 and 100. By default, all servers have an equal probability of 100.
+  * `weighted-random` - select DNS servers randomly based on `weighted-random-server-count` and `weighted-random-load-factor` params.
+* `weighted-random-server-count` is the number of DNS servers to be requested. Equals to the number of specified IPs by default. Used only with the `weighted-random` policy.
+* `weighted-random-load-factor` - the probability of selecting a server. This is specified in the order of the list of IP addresses and takes values between 1 and 100. By default, all servers have an equal probability of 100. Used only with the `weighted-random` policy.
 * `network` is a specific network protocol. Could be `tcp`, `udp`, `tcp-tls`.
 * `except` is a list is a space-separated list of domains to exclude from proxying.
 * `except-file` is the path to file with line-separated list of domains to exclude from proxying.
@@ -116,14 +116,13 @@ If `race` is enable, we will get `NXDOMAIN` result quickly, otherwise we will ge
 }
 ~~~
 
-Sends parallel requests between two randomly selected resolvers. Note, that `127.0.0.1:9007` would be selected more frequently as it has the highest `load-factor`.
+Sends parallel requests between two randomly selected resolvers. Note, that `127.0.0.1:9007` would be selected more frequently as it has the highest `weighted-random-load-factor`.
 ~~~ corefile
 example.org {
     fanout . 127.0.0.1:9005 127.0.0.1:9006 127.0.0.1:9007
-    policy weighted-random {
-      server-count 2
-      load-factor 50 70 100
-    }
+    policy weighted-random
+    weighted-random-server-count 2
+    weighted-random-load-factor 50 70 100
 }
 ~~~
 
