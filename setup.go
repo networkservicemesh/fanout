@@ -122,15 +122,14 @@ func parsefanoutStanza(c *caddyfile.Dispenser) (*Fanout, error) {
 		return f, err
 	}
 	for c.NextBlock() {
-		err = parseValue(strings.ToLower(c.Val()), f, c)
+		err = parseValue(strings.ToLower(c.Val()), f, c, toHosts)
 		if err != nil {
 			return nil, err
 		}
 	}
 	initClients(f, toHosts)
-	err = initServerSelectionPolicy(f)
-	if err != nil {
-		return nil, err
+	if f.serverCount > len(f.clients) || f.serverCount == 0 {
+		f.serverCount = len(f.clients)
 	}
 
 	if f.workerCount > len(f.clients) || f.workerCount == 0 {
@@ -156,30 +155,7 @@ func initClients(f *Fanout, hosts []string) {
 	}
 }
 
-func initServerSelectionPolicy(f *Fanout) error {
-	if f.serverCount > len(f.clients) || f.serverCount == 0 {
-		f.serverCount = len(f.clients)
-	}
-
-	loadFactor := f.loadFactor
-	if len(loadFactor) == 0 {
-		for i := 0; i < len(f.clients); i++ {
-			loadFactor = append(loadFactor, maxLoadFactor)
-		}
-	}
-	if len(loadFactor) != len(f.clients) {
-		return errors.New("load-factor params count must be the same as the number of hosts")
-	}
-
-	f.serverSelectionPolicy = &sequentialPolicy{}
-	if f.policyType == policyWeightedRandom {
-		f.serverSelectionPolicy = &weightedPolicy{loadFactor: loadFactor}
-	}
-
-	return nil
-}
-
-func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
+func parseValue(v string, f *Fanout, c *caddyfile.Dispenser, hosts []string) error {
 	switch v {
 	case "tls":
 		return parseTLS(f, c)
@@ -190,13 +166,7 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 	case "worker-count":
 		return parseWorkerCount(f, c)
 	case "policy":
-		return parsePolicy(f, c)
-	case "weighted-random-server-count":
-		serverCount, err := parsePositiveInt(c)
-		f.serverCount = serverCount
-		return err
-	case "weighted-random-load-factor":
-		return parseLoadFactor(f, c)
+		return parsePolicy(f, c, hosts)
 	case "timeout":
 		return parseTimeout(f, c)
 	case "race":
@@ -214,16 +184,55 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 	}
 }
 
-func parsePolicy(f *Fanout, c *caddyfile.Dispenser) error {
+func parsePolicy(f *Fanout, c *caddyfile.Dispenser, hosts []string) error {
 	if !c.NextArg() {
 		return c.ArgErr()
 	}
 
-	policyType := strings.ToLower(c.Val())
-	if policyType != policyWeightedRandom && policyType != policySequential {
+	switch c.Val() {
+	case policyWeightedRandom:
+		// omit "{"
+		c.Next()
+		if c.Val() != "{" {
+			return c.Err("Wrong policy configuration")
+		}
+	case policySequential:
+		f.serverSelectionPolicy = &sequentialPolicy{}
+		return nil
+	default:
 		return errors.Errorf("unknown policy %q", c.Val())
 	}
-	f.policyType = policyType
+
+	var loadFactor []int
+	for c.Next() {
+		if c.Val() == "}" {
+			break
+		}
+
+		var err error
+		switch c.Val() {
+		case "server-count":
+			f.serverCount, err = parsePositiveInt(c)
+		case "load-factor":
+			loadFactor, err = parseLoadFactor(c)
+		default:
+			return errors.Errorf("unknown property %q", c.Val())
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(loadFactor) == 0 {
+		for i := 0; i < len(hosts); i++ {
+			loadFactor = append(loadFactor, maxLoadFactor)
+		}
+	}
+	if len(loadFactor) != len(hosts) {
+		return errors.New("load-factor params count must be the same as the number of hosts")
+	}
+
+	f.serverSelectionPolicy = &weightedPolicy{loadFactor: loadFactor}
 
 	return nil
 }
@@ -295,29 +304,30 @@ func parseWorkerCount(f *Fanout, c *caddyfile.Dispenser) error {
 	return err
 }
 
-func parseLoadFactor(f *Fanout, c *caddyfile.Dispenser) error {
+func parseLoadFactor(c *caddyfile.Dispenser) ([]int, error) {
 	args := c.RemainingArgs()
 	if len(args) == 0 {
-		return c.ArgErr()
+		return nil, c.ArgErr()
 	}
 
+	result := make([]int, 0, len(args))
 	for _, arg := range args {
 		loadFactor, err := strconv.Atoi(arg)
 		if err != nil {
-			return c.ArgErr()
+			return nil, c.ArgErr()
 		}
 
 		if loadFactor < minLoadFactor {
-			return errors.New("load-factor should be more or equal 1")
+			return nil, errors.New("load-factor should be more or equal 1")
 		}
 		if loadFactor > maxLoadFactor {
-			return errors.Errorf("load-factor %d should be less than %d", loadFactor, maxLoadFactor)
+			return nil, errors.Errorf("load-factor %d should be less than %d", loadFactor, maxLoadFactor)
 		}
 
-		f.loadFactor = append(f.loadFactor, loadFactor)
+		result = append(result, loadFactor)
 	}
 
-	return nil
+	return result, nil
 }
 
 func parsePositiveInt(c *caddyfile.Dispenser) (int, error) {
