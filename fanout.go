@@ -49,6 +49,8 @@ type Fanout struct {
 	attempts              int
 	workerCount           int
 	serverCount           int
+	loadFactor            []int
+	policyType            string
 	serverSelectionPolicy policy
 	tapPlugin             *dnstap.Dnstap
 	Next                  plugin.Handler
