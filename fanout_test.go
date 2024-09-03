@@ -1,5 +1,7 @@
 // Copyright (c) 2020 Doc.ai and/or its affiliates.
 //
+// Copyright (c) 2024 MWS and/or its affiliates.
+//
 // SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +21,6 @@ package fanout
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -112,7 +113,7 @@ type fanoutTestSuite struct {
 }
 
 func TestFanout_ExceptFile(t *testing.T) {
-	file, err := ioutil.TempFile(os.TempDir(), t.Name())
+	file, err := os.CreateTemp(os.TempDir(), t.Name())
 	exclude := []string{"example1.com.", "example2.com."}
 	require.Nil(t, err)
 	defer func() {
@@ -177,7 +178,7 @@ func (t *fanoutTestSuite) TestWorkerCountLessThenServers() {
 	f.from = "."
 
 	for i := 0; i < 4; i++ {
-		incorrectServer := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
+		incorrectServer := newServer(t.network, func(_ dns.ResponseWriter, _ *dns.Msg) {
 		})
 		f.addClient(NewClient(incorrectServer.addr, t.network))
 		closeFuncs = append(closeFuncs, incorrectServer.close)
@@ -280,9 +281,8 @@ func (t *fanoutTestSuite) TestBusyServer() {
 	var requestNum, answerCount int32
 	totalRequestNum := int32(5)
 	s := newServer(t.network, func(w dns.ResponseWriter, r *dns.Msg) {
-		if atomic.LoadInt32(&requestNum)%2 == 0 {
-			// server is busy
-		} else if r.Question[0].Name == testQuery {
+		serverIsBusy := atomic.LoadInt32(&requestNum)%2 == 0
+		if !serverIsBusy && r.Question[0].Name == testQuery {
 			msg := dns.Msg{
 				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
 			}
@@ -364,6 +364,49 @@ func (t *fanoutTestSuite) TestTwoServers() {
 	t.Equal(answerCount2, expected)
 }
 
+func (t *fanoutTestSuite) TestServerCount() {
+	defer goleak.VerifyNone(t.T())
+	const expected = 1
+	var mutex sync.Mutex
+	answerCount := 0
+
+	testFunc := func(w dns.ResponseWriter, r *dns.Msg) {
+		if r.Question[0].Name == testQuery {
+			msg := dns.Msg{
+				Answer: []dns.RR{makeRecordA("example1 3600	IN	A 10.0.0.1")},
+			}
+			mutex.Lock()
+			answerCount++
+			mutex.Unlock()
+			msg.SetReply(r)
+			logErrIfNotNil(w.WriteMsg(&msg))
+		}
+	}
+	s1 := newServer(t.network, testFunc)
+	defer s1.close()
+	s2 := newServer(t.network, testFunc)
+	defer s2.close()
+
+	c1 := NewClient(s1.addr, t.network)
+	c2 := NewClient(s2.addr, t.network)
+	f := New()
+	f.serverSelectionPolicy = &weightedPolicy{loadFactor: []int{50, 100}}
+	f.net = t.network
+	f.from = "."
+	f.addClient(c1)
+	f.addClient(c2)
+	f.serverCount = 1
+
+	req := new(dns.Msg)
+	req.SetQuestion(testQuery, dns.TypeA)
+	_, err := f.ServeDNS(context.TODO(), &test.ResponseWriter{}, req)
+	t.Nil(err)
+
+	mutex.Lock()
+	t.Equal(expected, answerCount)
+	mutex.Unlock()
+}
+
 func TestFanoutUDPSuite(t *testing.T) {
 	suite.Run(t, &fanoutTestSuite{network: udp})
 }
@@ -374,6 +417,6 @@ func TestFanoutTCPSuite(t *testing.T) {
 func nxdomainMsg() *dns.Msg {
 	return &dns.Msg{MsgHdr: dns.MsgHdr{Rcode: dns.RcodeNameError},
 		Question: []dns.Question{{Name: "wwww.example1.", Qclass: dns.ClassINET, Qtype: dns.TypeTXT}},
-		Ns: []dns.RR{test.SOA("example1.	1800	IN	SOA	example1.net. example1.com 1461471181 14400 3600 604800 14400")},
+		Ns:       []dns.RR{test.SOA("example1.	1800	IN	SOA	example1.net. example1.com 1461471181 14400 3600 604800 14400")},
 	}
 }
