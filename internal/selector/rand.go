@@ -19,7 +19,6 @@ package selector
 
 import (
 	"math/rand"
-	"time"
 )
 
 // WeightedRand selector picks elements randomly based on their weights
@@ -31,13 +30,12 @@ type WeightedRand[T any] struct {
 }
 
 // NewWeightedRandSelector inits WeightedRand by copying source values and calculating total weight
-func NewWeightedRandSelector[T any](values []T, weights []int) *WeightedRand[T] {
+func NewWeightedRandSelector[T any](values []T, weights []int, r *rand.Rand) *WeightedRand[T] {
 	wrs := &WeightedRand[T]{
 		values:      make([]T, len(values)),
 		weights:     make([]int, len(weights)),
 		totalWeight: 0,
-		//nolint:gosec // it's overhead to use crypto/rand here
-		r: rand.New(rand.NewSource(time.Now().UnixNano())),
+		r:           r,
 	}
 	// copy the underlying array values as we're going to modify content of slices
 	copy(wrs.values, values)

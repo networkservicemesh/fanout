@@ -21,6 +21,7 @@ package fanout
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"strings"
@@ -29,15 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
-
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/coredns/coredns/plugin/test"
 	"github.com/miekg/dns"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/goleak"
 )
 
 const testQuery = "example1."
@@ -390,7 +389,7 @@ func (t *fanoutTestSuite) TestServerCount() {
 	c1 := NewClient(s1.addr, t.network)
 	c2 := NewClient(s2.addr, t.network)
 	f := New()
-	f.serverSelectionPolicy = &weightedPolicy{loadFactor: []int{50, 100}}
+	f.serverSelectionPolicy = &weightedPolicy{loadFactor: []int{50, 100}, r: rand.New(rand.NewSource(1))}
 	f.net = t.network
 	f.from = "."
 	f.addClient(c1)
