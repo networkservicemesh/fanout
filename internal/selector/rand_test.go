@@ -64,7 +64,7 @@ func TestWeightedRand_Pick(t *testing.T) {
 	}
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			// init rand with constant seed to get predefined result
+			//nolint:gosec // init rand with constant seed to get predefined result
 			r := rand.New(rand.NewSource(1))
 
 			wrs := NewWeightedRandSelector(tc.values, tc.weights, r)

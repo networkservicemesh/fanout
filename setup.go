@@ -176,7 +176,8 @@ func initServerSelectionPolicy(f *Fanout) error {
 	if f.policyType == policyWeightedRandom {
 		f.serverSelectionPolicy = &weightedPolicy{
 			loadFactor: loadFactor,
-			r:          rand.New(rand.NewSource(time.Now().UnixNano())),
+			//nolint:gosec // it's overhead to use crypto/rand here
+			r: rand.New(rand.NewSource(time.Now().UnixNano())),
 		}
 	}
 

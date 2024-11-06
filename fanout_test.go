@@ -389,7 +389,11 @@ func (t *fanoutTestSuite) TestServerCount() {
 	c1 := NewClient(s1.addr, t.network)
 	c2 := NewClient(s2.addr, t.network)
 	f := New()
-	f.serverSelectionPolicy = &weightedPolicy{loadFactor: []int{50, 100}, r: rand.New(rand.NewSource(1))}
+	f.serverSelectionPolicy = &weightedPolicy{
+		loadFactor: []int{50, 100},
+		//nolint:gosec // init rand with constant seed to get predefined result
+		r: rand.New(rand.NewSource(1)),
+	}
 	f.net = t.network
 	f.from = "."
 	f.addClient(c1)
