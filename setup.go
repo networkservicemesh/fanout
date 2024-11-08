@@ -19,6 +19,7 @@
 package fanout
 
 import (
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -173,7 +174,11 @@ func initServerSelectionPolicy(f *Fanout) error {
 
 	f.serverSelectionPolicy = &sequentialPolicy{}
 	if f.policyType == policyWeightedRandom {
-		f.serverSelectionPolicy = &weightedPolicy{loadFactor: loadFactor}
+		f.serverSelectionPolicy = &weightedPolicy{
+			loadFactor: loadFactor,
+			//nolint:gosec // it's overhead to use crypto/rand here
+			r: rand.New(rand.NewSource(time.Now().UnixNano())),
+		}
 	}
 
 	return nil

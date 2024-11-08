@@ -16,7 +16,11 @@
 
 package fanout
 
-import "github.com/networkservicemesh/fanout/internal/selector"
+import (
+	"math/rand"
+
+	"github.com/networkservicemesh/fanout/internal/selector"
+)
 
 type policy interface {
 	selector(clients []Client) clientSelector
@@ -38,9 +42,10 @@ func (p *sequentialPolicy) selector(clients []Client) clientSelector {
 // weightedPolicy is used to select clients randomly based on its loadFactor (weights)
 type weightedPolicy struct {
 	loadFactor []int
+	r          *rand.Rand
 }
 
 // creates new weighted random selector of provided clients based on loadFactor
 func (p *weightedPolicy) selector(clients []Client) clientSelector {
-	return selector.NewWeightedRandSelector(clients, p.loadFactor)
+	return selector.NewWeightedRandSelector(clients, p.loadFactor, p.r)
 }
