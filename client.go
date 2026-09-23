@@ -70,6 +70,58 @@ func (c *client) Endpoint() string {
 	return c.addr
 }
 
+// requestTCP sends the request to the same upstream over TCP and returns
+// the reply. It is used to recover from truncated (TC=1) UDP replies.
+// Telnyx addition for INFRA-798.
+func (c *client) requestTCP(ctx context.Context, r *request.Request) (*dns.Msg, error) {
+	span := ot.SpanFromContext(ctx)
+	if span != nil {
+		childSpan := span.Tracer().StartSpan("request-tcp", ot.ChildOf(span.Context()))
+		otext.PeerAddress.Set(childSpan, c.addr)
+		ctx = ot.ContextWithSpan(ctx, childSpan)
+		defer childSpan.Finish()
+	}
+	start := time.Now()
+	conn, err := c.transport.Dial(ctx, TCP)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = conn.Close()
+	}()
+	go func() {
+		<-ctx.Done()
+		_ = conn.Close()
+	}()
+	if err = conn.SetWriteDeadline(time.Now().Add(maxTimeout)); err != nil {
+		return nil, err
+	}
+	if err = conn.WriteMsg(r.Req); err != nil {
+		return nil, err
+	}
+	if err = conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		return nil, err
+	}
+	var ret *dns.Msg
+	for {
+		ret, err = conn.ReadMsg()
+		if err != nil {
+			return nil, err
+		}
+		if r.Req.Id == ret.Id {
+			break
+		}
+	}
+	rc, ok := dns.RcodeToString[ret.Rcode]
+	if !ok {
+		rc = fmt.Sprint(ret.Rcode)
+	}
+	RequestCount.WithLabelValues(c.addr).Add(1)
+	RcodeCount.WithLabelValues(rc, c.addr).Add(1)
+	RequestDuration.WithLabelValues(c.addr).Observe(time.Since(start).Seconds())
+	return ret, nil
+}
+
 // Request sends request to DNS server
 func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, error) {
 	span := ot.SpanFromContext(ctx)
@@ -117,6 +169,20 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 		if r.Req.Id == ret.Id {
 			break
 		}
+	}
+
+	// Telnyx: retry over TCP when the upstream reply is truncated (TC=1) and
+	// the client did not already use TCP upstream. RFC 2181 $9: a truncated
+	// response means the answer did not fit; the standard recovery is to
+	// re-send the query over TCP. Without this, 512B-no-EDNS clients (which
+	// advertise a small UDP buffer to the upstream via conn.UDPSize below)
+	// received TC relays verbatim and never got the full answer.
+	// See INFRA-798.
+	if ret.Truncated && c.net == UDP {
+		if tcpRet, tcpErr := c.requestTCP(ctx, r); tcpErr == nil {
+			ret = tcpRet
+		}
+		// On TCP failure fall back to the truncated reply (client may retry itself).
 	}
 	rc, ok := dns.RcodeToString[ret.Rcode]
 	if !ok {
